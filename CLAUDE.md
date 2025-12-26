@@ -83,6 +83,58 @@ pytest tests/features/
 - Test functions: `test_<function_name>_<scenario>`
 - Example: `test_parse_preference_pairs_handles_empty_input`
 
+## Git Branching Strategy
+
+This project uses a multi-branch workflow to separate shared infrastructure from approach-specific implementations.
+
+### Branch Structure
+
+- **`shared`** - Shared foundation code (data prep, evaluation, model config)
+- **`dpo`** - DPO (Direct Preference Optimization) approach implementation
+- **`sft`** - SFT (Supervised Fine-Tuning) approach implementation (if applicable)
+- Other approach-specific branches as needed
+
+### What Goes Where
+
+**Push to `shared` branch:**
+- Data preparation pipeline (`src/data_prep/`)
+- Evaluation infrastructure (`src/evaluation/`)
+- Model configuration (`src/models/config.py`)
+- Shared utilities (`src/utils/`)
+- Common tests for shared components
+- Documentation for shared architecture
+
+**Push to approach-specific branches (e.g., `dpo`, `sft`):**
+- Training loops specific to the approach
+- Approach-specific hyperparameters
+- Reward modeling (if approach-specific)
+- Approach-specific tests
+
+### Workflow
+
+1. **Before starting work**, identify if the change is shared or approach-specific
+2. **For shared changes**: Checkout `shared` branch, implement, push to `shared`
+3. **For approach changes**: Checkout the approach branch, implement, push there
+4. **Merge shared into approach branches** regularly to keep them up to date
+
+```bash
+# Working on shared infrastructure
+git checkout shared
+# ... make changes ...
+git add . && git commit -m "Add feature to shared infrastructure"
+git push origin shared
+
+# Update approach branch with shared changes
+git checkout dpo
+git merge shared
+```
+
+### Decision Guide
+
+Ask: "Would this code be used by multiple training approaches?"
+- **Yes** → Push to `shared`
+- **No** → Push to the specific approach branch
+
 ## Code Quality Requirements
 
 ### Before Committing
