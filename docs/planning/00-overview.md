@@ -55,11 +55,13 @@ This branch implements **full RLHF with PPO** (Proximal Policy Optimization) for
 | Phase | Name | Description | Branch |
 |-------|------|-------------|--------|
 | 1 | Data Preparation | Convert textbook to training format + preference pairs | shared |
-| 2 | Voice Evaluator | Build voice fidelity scoring system | shared |
+| 2a | Voice Evaluator | Build voice fidelity scoring system | shared |
+| 2b | Evaluation Pipeline | Hierarchical quiz + voice evaluation system | shared |
 | 3 | Model Selection | Choose and configure base model | shared |
 | - | **Training Approach** | DPO or PPO implementation | dpo/ppo |
 | - | **Pipeline Integration** | Combine SFT + approach | dpo/ppo |
 | - | **Training Execution** | Train and evaluate | dpo/ppo |
+| - | **Final Evaluation** | Run shared evaluation pipeline | shared |
 
 ## Model Selection
 
@@ -95,10 +97,12 @@ For resource-constrained environments (~16GB vs ~24GB VRAM).
 | Phase | Duration | Cumulative |
 |-------|----------|------------|
 | Data Preparation | 2-3 days | Day 3 |
-| Voice Evaluator | 2-3 days | Day 6 |
+| Voice Evaluator | 1-2 days | Day 5 |
+| Evaluation Pipeline | 1-2 days | Day 6 |
 | Model Setup | 1 day | Day 7 |
 | **DPO Training** | 5-7 days | Day 14 |
 | **PPO Training** | 7-10 days | Day 17 |
+| **Final Evaluation** | ~2-4 hours | (per run) |
 
 ## Resources Required
 
@@ -110,10 +114,11 @@ For resource-constrained environments (~16GB vs ~24GB VRAM).
 
 ```
 shared (this branch)
-├── 00-overview.md          # This file
-├── 01-data-preparation.md  # Preference pair generation
-├── 02-voice-evaluator.md   # Voice fidelity scoring
-└── 03-model-selection.md   # Model analysis
+├── 00-overview.md            # This file
+├── 01-data-preparation.md    # Preference pair generation
+├── 02-voice-evaluator.md     # Voice fidelity scoring
+├── 02b-evaluation-pipeline.md # Hierarchical evaluation system
+└── 03-model-selection.md     # Model analysis
 
 dpo (extends shared)
 ├── 01-dpo-trainer.md       # DPO implementation
@@ -132,6 +137,7 @@ ppo (extends shared)
 **Shared (from base):**
 - [01: Data Preparation](./01-data-preparation.md)
 - [02: Voice Evaluator](./02-voice-evaluator.md)
+- [02b: Evaluation Pipeline](./02b-evaluation-pipeline.md)
 - [03: Model Selection](./03-model-selection.md)
 
 **PPO-Specific:**
