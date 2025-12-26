@@ -1,0 +1,14 @@
+title: Bob Loukas Bitcoin Cycle Trading
+version: "1.0"
+
+units:
+  - id: unit-01
+    title: Foundation
+    chapters:
+      - id: chapter-01
+        title: Market Participants
+        topics:
+          - id: topic-01
+            title: The Three Types
+          - id: topic-02
+            title: Realistic Expectations
