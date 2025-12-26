@@ -1,12 +1,14 @@
-# Bob Loukas Mindprint RLHF LoRA - Project Overview
+# Bob Loukas Mindprint RLHF LoRA - DPO Approach
 
 ## Executive Summary
 
-This project implements RLHF-enhanced LoRA fine-tuning for the Bob Loukas mindprint, a Bitcoin cycle trading expert persona. The implementation builds on existing infrastructure from the Rank-1 ReLoRA Mindprinting Cookbook.
+This branch implements **Direct Preference Optimization (DPO)** for the Bob Loukas mindprint. DPO provides a simpler, faster alternative to full RLHF by directly optimizing preferences without a separate reward model.
 
-**Two approaches are available:**
-- `dpo` branch: Direct Preference Optimization (simpler, faster)
-- `ppo` branch: Full RLHF with reward model (richer signal, more compute)
+**Advantages of DPO:**
+- Single-stage training (no reward model needed)
+- More stable optimization
+- Works well with ~500 preference pairs
+- ~35 hours training time vs ~50 hours for PPO
 
 ## Goals
 
@@ -127,12 +129,18 @@ ppo (extends shared)
 
 ## Related Documents (This Branch)
 
-- [Phase 1: Data Preparation](./01-data-preparation.md)
-- [Phase 2: Voice Evaluator](./02-voice-evaluator.md)
-- [Phase 3: Model Selection](./03-model-selection.md)
+**Shared (from base):**
+- [01: Data Preparation](./01-data-preparation.md)
+- [02: Voice Evaluator](./02-voice-evaluator.md)
+- [03: Model Selection](./03-model-selection.md)
+
+**DPO-Specific:**
+- [04: DPO Trainer](./04-dpo-trainer.md)
+- [05: DPO Pipeline](./05-dpo-pipeline.md)
+- [06: DPO Training](./06-dpo-training.md)
 
 ---
 
 *Created: December 2025*
 *Project: Memetica Corporation - Mindprint Agent*
-*Branch: shared (common foundation)*
+*Branch: dpo (Direct Preference Optimization)*
