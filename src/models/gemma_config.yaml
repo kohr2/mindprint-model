@@ -1,0 +1,75 @@
+# Gemma-3-12B Configuration for Bob Loukas Mindprint
+# Primary recommendation for Mac Studio M2 Ultra (64GB)
+
+name: gemma-3-12b
+hf_path: google/gemma-3-12b-it
+layers: 48
+hidden_size: 3840
+attention_heads: 16
+kv_heads: 8
+context_length: 128000
+prompt_format: gemma
+
+# Layer targeting strategy for mindprinting
+# Based on rank-1 LoRA cookbook findings
+layer_zones:
+  lexicon:
+    layers: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    modules: ["q_proj"]
+    content: "Bob's terminology (4-year cycle, accumulation, distribution, cycle low/high)"
+
+  reasoning:
+    layers: "12-35"  # Will be expanded to range
+    modules: ["v_proj", "up_proj", "down_proj"]
+    content: "Cycle theory, pattern recognition, market psychology analysis"
+
+  voice:
+    layers: [36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47]
+    modules: ["o_proj", "up_proj", "down_proj"]
+    content: "Confidence markers, teaching style, engagement patterns"
+
+# LoRA configuration
+lora:
+  r: 8              # Rank (start small, increase if needed)
+  alpha: 16         # Alpha = 2 * rank as starting point
+  dropout: 0.05     # Light dropout for regularization
+  target_modules:   # For full training (not zone-specific)
+    - q_proj
+    - v_proj
+    - o_proj
+    - up_proj
+    - down_proj
+
+# Compute requirements
+compute:
+  # Mac Studio M2 Ultra (primary target)
+  vram_fp16: 24     # GB for fp16 (model weights)
+  vram_4bit: 12     # GB for 4-bit quantization
+  vram_bf16: 24     # GB for bfloat16
+
+  # Training estimates
+  batch_size: 8           # Mac Studio can handle larger batches
+  batch_size_4bit: 4      # For CUDA 4-bit training
+  hours_dpo: 40           # Estimated DPO training time (Mac Studio)
+  hours_ppo: 60           # Estimated PPO training time
+
+  # Platform-specific notes
+  platforms:
+    mac_studio_m2_ultra:
+      memory: 64          # GB unified memory
+      precision: fp16     # No quantization needed
+      batch_size: 8
+      backend: mps        # Metal Performance Shaders
+      flash_attention: false  # Not available on MPS
+
+    a100_40gb:
+      precision: 4bit
+      batch_size: 4
+      backend: cuda
+      flash_attention: true
+
+    rtx_4090:
+      precision: 4bit
+      batch_size: 2
+      backend: cuda
+      flash_attention: true

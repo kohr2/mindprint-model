@@ -80,18 +80,19 @@ Voice       | 36-47   | o_proj + MLP    | Confidence, teaching style
 
 ## Recommendation
 
-### Primary: Gemma-3-12B
+### Primary: Gemma-3-12B on Mac Studio M2 Ultra
 
 **Rationale:**
 1. Layer anatomy already documented in cookbook
 2. 48 layers = maximum targeting granularity
 3. Proven for mindprinting approach
-4. Trainable on A100 40GB or 2x RTX 4090
+4. 64GB unified memory allows fp16 without quantization
+5. Larger batch sizes (8) than CUDA alternatives
 
 ### Alternative: Qwen2.5-7B
 
 **When to use:**
-- Single RTX 4090 (24GB)
+- Limited memory (< 32GB)
 - Need faster iteration
 - Consumer-grade deployment
 
@@ -120,11 +121,19 @@ voice_zone:
 
 ### Gemma-3-12B Training
 
-| Setup | Quantization | Batch Size | Time Estimate |
-|-------|--------------|------------|---------------|
+| Setup | Precision | Batch Size | Time Estimate |
+|-------|-----------|------------|---------------|
+| **Mac Studio M2 Ultra (64GB)** | fp16 | 8 | ~40-50h (DPO) |
 | A100 40GB | 4-bit | 4 | ~34h (DPO) / ~48h (PPO) |
 | 2x RTX 4090 | 4-bit | 2/GPU | ~50h (DPO) / ~70h (PPO) |
 | 1x RTX 4090 | Use Qwen-7B | - | - |
+
+### Apple Silicon Notes
+
+- **No quantization needed**: 64GB unified memory loads Gemma-3-12B in fp16 (~24GB) with headroom
+- **Unified memory advantage**: Larger batch sizes possible (8 vs 4)
+- **MPS backend**: Uses Metal Performance Shaders instead of CUDA
+- **Flash Attention**: Not available on MPS; uses standard attention
 
 ---
 
