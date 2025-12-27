@@ -1,0 +1,79 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mindprint-model"
+version = "0.1.0"
+description = "Bob Loukas Mindprint RLHF LoRA - Training data preparation and evaluation pipeline"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+authors = [
+    {name = "Memetica Corporation"}
+]
+keywords = ["llm", "fine-tuning", "rlhf", "dpo", "lora", "mindprint"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "transformers>=4.40.0",
+    "peft>=0.10.0",
+    "trl>=0.9.0",
+    "sentence-transformers>=2.5.0",
+    "scikit-learn>=1.4.0",
+    "torch>=2.2.0",
+    "datasets>=2.19.0",
+    "pyyaml>=6.0",
+    "anthropic>=0.20.0",
+    "huggingface-hub>=0.21.0",
+    "bitsandbytes>=0.43.0",
+    "accelerate>=0.28.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.1.0",
+    "black>=24.0.0",
+    "ruff>=0.3.0",
+    "mypy>=1.9.0",
+]
+
+[project.scripts]
+mindprint-data-prep = "scripts.run_data_prep:main"
+mindprint-evaluate = "scripts.run_evaluation:main"
+mindprint-download = "scripts.download_model:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*", "scripts*"]
+
+[tool.black]
+line-length = 100
+target-version = ["py39", "py310", "py311", "py312"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]

@@ -1,0 +1,66 @@
+# Qwen2.5-7B Configuration for Bob Loukas Mindprint
+# Alternative for limited memory or faster iteration
+
+name: qwen2.5-7b
+hf_path: Qwen/Qwen2.5-7B-Instruct
+layers: 28
+hidden_size: 3584
+attention_heads: 28
+kv_heads: 4
+context_length: 131072
+prompt_format: chatml
+
+# Layer targeting strategy
+# Adjusted for 28-layer architecture
+layer_zones:
+  lexicon:
+    layers: [0, 1, 2, 3, 4, 5, 6]
+    modules: ["q_proj"]
+    content: "Bob's terminology"
+
+  reasoning:
+    layers: "7-20"
+    modules: ["v_proj", "up_proj", "down_proj"]
+    content: "Cycle theory, pattern recognition"
+
+  voice:
+    layers: [21, 22, 23, 24, 25, 26, 27]
+    modules: ["o_proj", "up_proj", "down_proj"]
+    content: "Confidence markers, teaching style"
+
+# LoRA configuration
+lora:
+  r: 8
+  alpha: 16
+  dropout: 0.05
+  target_modules:
+    - q_proj
+    - v_proj
+    - o_proj
+    - up_proj
+    - down_proj
+
+# Compute requirements
+compute:
+  vram_fp16: 14     # GB for fp16
+  vram_4bit: 8      # GB for 4-bit
+  vram_bf16: 14     # GB for bfloat16
+
+  batch_size: 8
+  batch_size_4bit: 4
+  hours_dpo: 20
+  hours_ppo: 30
+
+  platforms:
+    mac_studio_m2_ultra:
+      memory: 64
+      precision: fp16
+      batch_size: 16    # Plenty of headroom
+      backend: mps
+      flash_attention: false
+
+    rtx_4090:
+      precision: 4bit
+      batch_size: 4
+      backend: cuda
+      flash_attention: true

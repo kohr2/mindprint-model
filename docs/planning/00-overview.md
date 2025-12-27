@@ -55,11 +55,13 @@ This branch implements **Direct Preference Optimization (DPO)** for the Bob Louk
 | Phase | Name | Description | Branch |
 |-------|------|-------------|--------|
 | 1 | Data Preparation | Convert textbook to training format + preference pairs | shared |
-| 2 | Voice Evaluator | Build voice fidelity scoring system | shared |
+| 2a | Voice Evaluator | Build voice fidelity scoring system | shared |
+| 2b | Evaluation Pipeline | Hierarchical quiz + voice evaluation system | shared |
 | 3 | Model Selection | Choose and configure base model | shared |
 | - | **Training Approach** | DPO or PPO implementation | dpo/ppo |
 | - | **Pipeline Integration** | Combine SFT + approach | dpo/ppo |
 | - | **Training Execution** | Train and evaluate | dpo/ppo |
+| - | **Final Evaluation** | Run shared evaluation pipeline | shared |
 
 ## Model Selection
 
@@ -95,14 +97,16 @@ For resource-constrained environments (~16GB vs ~24GB VRAM).
 | Phase | Duration | Cumulative |
 |-------|----------|------------|
 | Data Preparation | 2-3 days | Day 3 |
-| Voice Evaluator | 2-3 days | Day 6 |
+| Voice Evaluator | 1-2 days | Day 5 |
+| Evaluation Pipeline | 1-2 days | Day 6 |
 | Model Setup | 1 day | Day 7 |
 | **DPO Training** | 5-7 days | Day 14 |
 | **PPO Training** | 7-10 days | Day 17 |
+| **Final Evaluation** | ~2-4 hours | (per run) |
 
 ## Resources Required
 
-- **Compute**: 1x A100 40GB or 2x RTX 4090 (for 4-bit training)
+- **Compute**: Mac Studio M2 Ultra (64GB unified memory) or 1x A100 40GB
 - **Storage**: ~100GB for model checkpoints and logs
 - **Source Data**: Bob Loukas textbook (already complete in omnia)
 
@@ -110,29 +114,31 @@ For resource-constrained environments (~16GB vs ~24GB VRAM).
 
 ```
 shared (this branch)
-├── 00-overview.md          # This file
-├── 01-data-preparation.md  # Preference pair generation
-├── 02-voice-evaluator.md   # Voice fidelity scoring
-└── 03-model-selection.md   # Model analysis
+├── 00-overview.md            # This file
+├── 01-data-preparation.md    # Preference pair generation
+├── 02-voice-evaluator.md     # Voice fidelity scoring
+├── 02b-evaluation-pipeline.md # Hierarchical evaluation system
+└── 03-model-selection.md     # Model analysis
 
 dpo (extends shared)
-├── 01-dpo-trainer.md       # DPO implementation
-├── 02-pipeline.md          # SFT + DPO pipeline
-└── 03-training.md          # DPO training execution
+├── 04-dpo-trainer.md       # DPO implementation
+├── 05-dpo-pipeline.md      # SFT + DPO pipeline
+└── 06-dpo-training.md      # DPO training execution
 
 ppo (extends shared)
-├── 01-reward-model.md      # Reward model training
-├── 02-ppo-trainer.md       # PPO implementation
-├── 03-pipeline.md          # SFT + PPO pipeline
-└── 04-training.md          # PPO training execution
+├── 04-reward-model.md      # Reward model training
+├── 05-ppo-trainer.md       # PPO implementation
+├── 06-ppo-pipeline.md      # SFT + PPO pipeline
+└── 07-ppo-training.md      # PPO training execution
 ```
 
-## Related Documents (This Branch)
+## Related Documents
 
 **Shared (from base):**
-- [01: Data Preparation](./01-data-preparation.md)
-- [02: Voice Evaluator](./02-voice-evaluator.md)
-- [03: Model Selection](./03-model-selection.md)
+- [Phase 1: Data Preparation](./01-data-preparation.md)
+- [Phase 2a: Voice Evaluator](./02-voice-evaluator.md)
+- [Phase 2b: Evaluation Pipeline](./02b-evaluation-pipeline.md)
+- [Phase 3: Model Selection](./03-model-selection.md)
 
 **DPO-Specific:**
 - [04: DPO Trainer](./04-dpo-trainer.md)
