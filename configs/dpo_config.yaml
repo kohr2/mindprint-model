@@ -1,0 +1,35 @@
+# DPO (Direct Preference Optimization) Configuration
+# Bob Loukas Mindprint - Mac Studio M2 Ultra (64GB)
+
+# DPO hyperparameters
+beta: 0.1  # KL penalty coefficient
+learning_rate: 5e-7  # Much lower than SFT
+max_steps: 100  # Steps per topic
+per_device_batch_size: 2  # Smaller for DPO
+gradient_accumulation_steps: 4
+
+# Sequence lengths
+max_prompt_length: 512
+max_length: 1024
+
+# Rank-1 LoRA configuration (minimal for refinement)
+lora:
+  rank: 1
+  alpha: 1.0
+  dropout: 0.0  # No dropout for Rank-1
+  target_modules:
+    - o_proj
+    - v_proj
+    - up_proj
+    - down_proj
+
+# Reference model
+ref_model_strategy: shared  # Options: shared, copy, none
+
+# MPS-specific settings
+device: mps
+dtype: float16
+
+# Output
+output_dir: ./output/dpo
+logging_steps: 10

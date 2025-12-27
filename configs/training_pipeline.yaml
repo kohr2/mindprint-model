@@ -1,0 +1,57 @@
+# Training Pipeline Configuration
+# Bob Loukas Mindprint - Mac Studio M2 Ultra (64GB)
+# Combined SFT + DPO training with evaluation
+
+# Model
+model:
+  name: google/gemma-3-12b
+  dtype: float16
+  device: mps
+
+# SFT settings
+sft:
+  epochs_per_topic: 3
+  learning_rate: 3e-4
+  batch_size: 4
+  lora_rank: 8
+  lora_alpha: 16
+  target_modules:
+    - q_proj
+    - v_proj
+    - o_proj
+
+# DPO settings
+dpo:
+  steps_per_topic: 100
+  learning_rate: 5e-7
+  batch_size: 2
+  beta: 0.1
+  lora_rank: 1
+  lora_alpha: 1.0
+  target_modules:
+    - o_proj
+    - v_proj
+    - up_proj
+    - down_proj
+
+# Thresholds
+thresholds:
+  accuracy_threshold: 0.70  # Min accuracy to try DPO
+  dpo_trigger_threshold: 0.75  # Voice < this triggers DPO
+  topic_pass_threshold: 0.90  # Combined score to pass
+
+# Pipeline control
+pipeline:
+  merge_after_unit: true
+  max_retries_per_topic: 2
+
+# Paths
+paths:
+  data_dir: ./data/bob_loukas
+  output_dir: ./output
+  checkpoint_dir: ./checkpoints
+
+# Logging
+logging:
+  level: INFO
+  log_file: ./logs/training.log
