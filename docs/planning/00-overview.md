@@ -121,24 +121,24 @@ shared (this branch)
 └── 03-model-selection.md     # Model analysis
 
 dpo (extends shared)
-├── 01-dpo-trainer.md       # DPO implementation
-├── 02-pipeline.md          # SFT + DPO pipeline
-└── 03-training.md          # DPO training execution
+├── 04-dpo-trainer.md       # DPO implementation
+├── 05-dpo-pipeline.md      # SFT + DPO pipeline
+└── 06-dpo-training.md      # DPO training execution
 
 ppo (extends shared)
-├── 01-reward-model.md      # Reward model training
-├── 02-ppo-trainer.md       # PPO implementation
-├── 03-pipeline.md          # SFT + PPO pipeline
-└── 04-training.md          # PPO training execution
+├── 04-reward-model.md      # Reward model training
+├── 05-ppo-trainer.md       # PPO implementation
+├── 06-ppo-pipeline.md      # SFT + PPO pipeline
+└── 07-ppo-training.md      # PPO training execution
 ```
 
 ## Related Documents (This Branch)
 
 **Shared (from base):**
-- [01: Data Preparation](./01-data-preparation.md)
-- [02: Voice Evaluator](./02-voice-evaluator.md)
-- [02b: Evaluation Pipeline](./02b-evaluation-pipeline.md)
-- [03: Model Selection](./03-model-selection.md)
+- [Phase 1: Data Preparation](./01-data-preparation.md)
+- [Phase 2a: Voice Evaluator](./02-voice-evaluator.md)
+- [Phase 2b: Evaluation Pipeline](./02b-evaluation-pipeline.md)
+- [Phase 3: Model Selection](./03-model-selection.md)
 
 **PPO-Specific:**
 - [04: Reward Model](./04-reward-model.md)

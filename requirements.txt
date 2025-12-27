@@ -1,0 +1,26 @@
+# Core ML/Training dependencies
+transformers>=4.40.0
+peft>=0.10.0
+trl>=0.9.0
+torch>=2.2.0
+datasets>=2.19.0
+accelerate>=0.28.0
+bitsandbytes>=0.43.0
+
+# Evaluation dependencies
+sentence-transformers>=2.5.0
+scikit-learn>=1.4.0
+
+# LLM API for question generation
+anthropic>=0.20.0
+
+# Utilities
+pyyaml>=6.0
+huggingface-hub>=0.21.0
+
+# Development dependencies (optional)
+# pytest>=8.0.0
+# pytest-cov>=4.1.0
+# black>=24.0.0
+# ruff>=0.3.0
+# mypy>=1.9.0
