@@ -1,0 +1,20 @@
+# Reward Model Configuration
+# Bob Loukas Mindprint - Mac Studio M2 Ultra (64GB)
+
+# Training hyperparameters
+learning_rate: 1e-5
+num_epochs: 1
+per_device_batch_size: 4
+max_length: 1024
+
+# Voice integration
+use_voice_penalty: true
+voice_penalty_weight: 0.1
+
+# MPS-specific settings
+device: mps
+dtype: float16
+
+# Output
+output_dir: ./output/reward_model
+logging_steps: 10

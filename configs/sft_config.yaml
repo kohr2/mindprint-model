@@ -1,0 +1,29 @@
+# SFT (Supervised Fine-Tuning) Configuration
+# Bob Loukas Mindprint - Mac Studio M2 Ultra (64GB)
+
+# Training hyperparameters
+learning_rate: 3e-4
+num_epochs: 3
+per_device_batch_size: 4
+gradient_accumulation_steps: 4
+warmup_ratio: 0.1
+
+# LoRA configuration
+lora:
+  rank: 8
+  alpha: 16
+  dropout: 0.05
+  target_modules:
+    - q_proj
+    - v_proj
+    - o_proj
+
+# MPS-specific settings
+device: mps
+dtype: float16
+gradient_checkpointing: true
+
+# Output
+output_dir: ./output/sft
+logging_steps: 10
+save_strategy: epoch

@@ -1,0 +1,43 @@
+# PPO (Proximal Policy Optimization) Configuration
+# Bob Loukas Mindprint - Mac Studio M2 Ultra (64GB)
+
+# Training hyperparameters
+learning_rate: 1e-5
+max_steps: 100  # Steps per topic
+per_device_batch_size: 4
+ppo_epochs: 4  # PPO epochs per batch
+
+# PPO hyperparameters
+clip_range: 0.2
+kl_penalty: 0.2
+kl_target: 0.05
+adaptive_kl: true
+value_coef: 0.5
+entropy_coef: 0.01
+
+# GAE parameters
+gamma: 1.0  # No discounting for single-turn
+gae_lambda: 0.95
+
+# Generation parameters
+max_new_tokens: 512
+temperature: 0.7
+top_p: 0.9
+
+# LoRA configuration
+lora:
+  rank: 8
+  alpha: 16
+  dropout: 0.05
+  target_modules:
+    - q_proj
+    - v_proj
+    - o_proj
+
+# MPS-specific settings
+device: mps
+dtype: float16
+
+# Output
+output_dir: ./output/ppo
+logging_steps: 10

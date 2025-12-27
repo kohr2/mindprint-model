@@ -1,0 +1,65 @@
+# PPO Training Pipeline Configuration
+# Bob Loukas Mindprint - Mac Studio M2 Ultra (64GB)
+# Three-phase training: SFT → Reward Model → PPO
+
+# Model
+model:
+  name: google/gemma-3-12b
+  dtype: float16
+  device: mps
+
+# SFT settings
+sft:
+  epochs_per_topic: 3
+  learning_rate: 3e-4
+  batch_size: 4
+  lora_rank: 8
+  lora_alpha: 16
+  target_modules:
+    - q_proj
+    - v_proj
+    - o_proj
+
+# Reward model settings
+reward_model:
+  epochs: 1
+  learning_rate: 1e-5
+  batch_size: 4
+  use_voice_penalty: true
+
+# PPO settings
+ppo:
+  steps_per_topic: 100
+  learning_rate: 1e-5
+  batch_size: 4
+  ppo_epochs: 4
+  kl_penalty: 0.2
+  kl_target: 0.05
+  adaptive_kl: true
+  clip_range: 0.2
+  lora_rank: 8
+  lora_alpha: 16
+  target_modules:
+    - q_proj
+    - v_proj
+    - o_proj
+
+# Thresholds
+thresholds:
+  topic_pass_threshold: 0.85  # Reward score to pass
+
+# Pipeline control
+pipeline:
+  merge_after_unit: true
+  max_retries_per_topic: 2
+
+# Paths
+paths:
+  data_dir: ./data/bob_loukas
+  output_dir: ./output
+  checkpoint_dir: ./checkpoints
+
+# Logging
+logging:
+  level: INFO
+  log_file: ./logs/training.log
