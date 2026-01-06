@@ -65,6 +65,10 @@ class PPOConfig:
     # Device settings
     device: str = "mps"
 
+    # Output settings
+    output_dir: Optional[str] = None  # If None, don't save adapters
+    save_adapters: bool = True  # Auto-save after training
+
     def __post_init__(self):
         """Validate configuration."""
         if self.learning_rate <= 0:
@@ -181,8 +185,13 @@ class PPOTrainer:
         # Store reference model (base without adapters)
         self.ref_model = self.base_model
 
-        # Create value head
-        hidden_size = self.base_model.config.hidden_size
+        # Create value head - support both standard and Gemma3 config
+        if hasattr(self.base_model.config, "hidden_size"):
+            hidden_size = self.base_model.config.hidden_size
+        elif hasattr(self.base_model.config, "text_config"):
+            hidden_size = self.base_model.config.text_config.hidden_size
+        else:
+            raise ValueError("Cannot determine hidden_size from model config")
         self.value_head = ValueHead(hidden_size)
         self.value_head.to(self.base_model.device)
 
@@ -527,6 +536,30 @@ class PPOTrainer:
                 f"Topic {topic_id} complete: reward={result.final_reward_mean:.4f}, "
                 f"kl={result.kl_divergence:.4f}"
             )
+
+            # Auto-save adapter if configured
+            if self.config.save_adapters and self.config.output_dir:
+                try:
+                    from .adapter_utils import get_adapter_paths, parse_topic_id
+
+                    # Parse topic_id to get components
+                    unit_id, chapter_id, topic_name = parse_topic_id(topic_id)
+
+                    # Get adapter path
+                    _, _, ppo_path = get_adapter_paths(
+                        self.config.output_dir,
+                        unit_id,
+                        chapter_id,
+                        topic_name
+                    )
+
+                    # Save adapter
+                    saved_path = self.save_adapter(ppo_path)
+                    result.adapter_path = str(saved_path)
+                    logger.info(f"Auto-saved PPO adapter to {saved_path}")
+
+                except Exception as e:
+                    logger.warning(f"Failed to auto-save PPO adapter: {e}")
 
         return result
 

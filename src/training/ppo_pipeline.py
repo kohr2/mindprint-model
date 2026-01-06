@@ -330,12 +330,14 @@ class PPOPipeline:
 
     def train_topic(self, topic_data: Dict) -> TopicProgress:
         """
-        Train a single topic with three-phase training.
+        Train a single topic with three-phase training and adaptive config.
 
         Flow:
-        1. SFT training on Q&A pairs
-        2. Reward model training on preference pairs
-        3. PPO training with reward signal
+        1. Compute data quality metrics
+        2. Generate adaptive training config
+        3. SFT training on Q&A pairs (with adaptive epochs/batch size)
+        4. Reward model training on preference pairs (with adaptive epochs)
+        5. PPO training with reward signal (with adaptive steps)
 
         Args:
             topic_data: Topic data with sft_data, preference_pairs, prompts
@@ -354,11 +356,62 @@ class PPOPipeline:
         )
 
         try:
-            # Phase 1: SFT Training
+            # NEW: Compute data quality and generate adaptive config
+            from .adaptive_config import AdaptiveConfigGenerator
+
+            config_gen = AdaptiveConfigGenerator(
+                baseline_sft_epochs=self.config.sft_epochs_per_topic,
+                baseline_sft_lr=self.config.sft_learning_rate,
+                baseline_sft_batch_size=self.config.sft_batch_size,
+                baseline_reward_epochs=self.config.reward_model_epochs,
+                baseline_reward_lr=self.config.reward_learning_rate,
+                baseline_reward_batch_size=self.config.reward_batch_size,
+                baseline_ppo_steps=self.config.ppo_steps_per_topic,
+                baseline_ppo_lr=self.config.ppo_learning_rate,
+                baseline_pass_threshold=self.config.topic_pass_threshold,
+            )
+
+            metrics = config_gen.compute_data_quality(
+                sft_data=topic_data.get("sft_data", []),
+                preference_pairs=topic_data.get("preference_pairs", [])
+            )
+
+            # Check if data is trainable
+            if not metrics.is_trainable:
+                logger.warning(
+                    f"Topic {topic_id} has insufficient data quality:\n"
+                    f"  Examples: {metrics.example_count}\n"
+                    f"  Avg output length: {metrics.avg_output_length:.0f}\n"
+                    f"  Voice density: {metrics.voice_marker_density:.1f}%"
+                )
+                progress.status = TopicStatus.FAILED
+                progress.training_time_seconds = time.time() - start_time
+                return progress
+
+            adaptive_config = config_gen.generate_config(metrics)
+
+            logger.info(f"Adaptive config for {topic_id}:")
+            logger.info(f"  Data quality:")
+            logger.info(f"    - Examples: {metrics.example_count}")
+            logger.info(f"    - Avg output length: {metrics.avg_output_length:.0f}")
+            logger.info(f"    - Voice density: {metrics.voice_marker_density:.1f}%")
+            logger.info(f"    - Preference quality: {metrics.preference_quality_score:.2f}")
+            logger.info(f"  Training config:")
+            logger.info(f"    - SFT: {adaptive_config.sft_epochs} epochs, "
+                       f"lr={adaptive_config.sft_learning_rate:.1e}, "
+                       f"batch={adaptive_config.sft_batch_size}")
+            logger.info(f"    - Reward: {adaptive_config.reward_epochs} epochs")
+            logger.info(f"    - PPO: {adaptive_config.ppo_steps} steps")
+            logger.info(f"    - Pass threshold: {adaptive_config.pass_threshold}")
+            logger.info(f"  Rationale: {adaptive_config.rationale}")
+
+            # Phase 1: SFT Training (with adaptive config)
             sft_config = SFTConfig(
-                learning_rate=self.config.sft_learning_rate,
-                num_epochs=self.config.sft_epochs_per_topic,
-                per_device_batch_size=self.config.sft_batch_size,
+                learning_rate=adaptive_config.sft_learning_rate,
+                num_epochs=adaptive_config.sft_epochs,
+                per_device_batch_size=adaptive_config.sft_batch_size,
+                output_dir=self.config.output_dir,  # Enable adapter saving
+                save_adapters=True,
             )
             sft_trainer = SFTTrainer(self.model, self.tokenizer, sft_config)
 
@@ -376,12 +429,12 @@ class PPOPipeline:
             progress.sft_loss = sft_result.final_loss
             self.model = sft_trainer.get_model()
 
-            # Phase 2: Reward Model Training
+            # Phase 2: Reward Model Training (with adaptive config)
             progress.status = TopicStatus.REWARD_TRAINING
             reward_config = RewardConfig(
-                learning_rate=self.config.reward_learning_rate,
-                num_epochs=self.config.reward_model_epochs,
-                per_device_batch_size=self.config.reward_batch_size,
+                learning_rate=adaptive_config.reward_learning_rate,
+                num_epochs=adaptive_config.reward_epochs,
+                per_device_batch_size=adaptive_config.reward_batch_size,
             )
             reward_trainer = RewardModelTrainer(
                 self.model, self.tokenizer, reward_config
@@ -399,13 +452,15 @@ class PPOPipeline:
             progress.reward_accuracy = reward_result.final_accuracy
             self.reward_model = reward_trainer.get_reward_model()
 
-            # Phase 3: PPO Training
+            # Phase 3: PPO Training (with adaptive config)
             progress.status = TopicStatus.PPO_TRAINING
             ppo_config = PPOConfig(
-                learning_rate=self.config.ppo_learning_rate,
-                max_steps=self.config.ppo_steps_per_topic,
+                learning_rate=adaptive_config.ppo_learning_rate,
+                max_steps=adaptive_config.ppo_steps,
                 per_device_batch_size=self.config.ppo_batch_size,
                 kl_penalty=self.config.ppo_kl_penalty,
+                output_dir=self.config.output_dir,  # Enable adapter saving
+                save_adapters=True,
             )
             ppo_trainer = PPOTrainer(
                 self.model, self.tokenizer, self.reward_model, ppo_config
@@ -423,11 +478,19 @@ class PPOPipeline:
                 progress.reward_score = ppo_result.final_reward_mean
                 self.model = ppo_trainer.get_model()
 
-                # Check if passed threshold
-                if progress.reward_score >= self.config.topic_pass_threshold:
+                # Check if passed adaptive threshold
+                if progress.reward_score >= adaptive_config.pass_threshold:
                     progress.status = TopicStatus.PASSED
+                    logger.info(
+                        f"Topic {topic_id} PASSED: "
+                        f"reward {progress.reward_score:.4f} >= {adaptive_config.pass_threshold:.2f}"
+                    )
                 else:
                     progress.status = TopicStatus.FAILED
+                    logger.info(
+                        f"Topic {topic_id} FAILED: "
+                        f"reward {progress.reward_score:.4f} < {adaptive_config.pass_threshold:.2f}"
+                    )
             else:
                 progress.status = TopicStatus.FAILED
 
@@ -441,16 +504,98 @@ class PPOPipeline:
             return progress
 
         except Exception as e:
+            import traceback
             logger.error(f"Topic {topic_id} training failed: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             progress.status = TopicStatus.FAILED
             progress.training_time_seconds = time.time() - start_time
             return progress
 
     def _merge_unit_adapters(self, unit_progress: UnitProgress) -> None:
-        """Merge all adapters from a unit into the model."""
+        """
+        Merge all adapters from a unit into the base model.
+
+        This performs incremental merging of all topic adapters from the unit,
+        combining SFT + Reward + PPO adapters in sequence.
+
+        Args:
+            unit_progress: Unit progress containing all topic results
+        """
         logger.info(f"Merging adapters for unit: {unit_progress.unit_id}")
-        # Placeholder for explicit merge logic
-        pass
+
+        from .merge import LoRAMerger, MergeConfig
+        from .adapter_utils import get_adapter_paths, get_merged_adapter_path, parse_topic_id
+
+        # Collect all adapter paths from this unit's passed topics
+        adapter_paths = []
+
+        for chapter in unit_progress.chapters:
+            for topic in chapter.topics:
+                if topic.status == TopicStatus.PASSED:
+                    try:
+                        # Parse topic ID to get components
+                        unit_id, chapter_id, topic_name = parse_topic_id(topic.topic_id)
+
+                        # Get paths for this topic's adapters
+                        sft_path, reward_path, ppo_path = get_adapter_paths(
+                            self.config.output_dir,
+                            unit_id,
+                            chapter_id,
+                            topic_name
+                        )
+
+                        # Add existing adapter paths (PPO includes all training)
+                        if ppo_path.exists():
+                            adapter_paths.append(str(ppo_path))
+                            logger.debug(f"Added adapter: {ppo_path}")
+                        elif sft_path.exists():
+                            # Fallback to SFT if PPO doesn't exist
+                            adapter_paths.append(str(sft_path))
+                            logger.debug(f"Added adapter: {sft_path}")
+
+                    except Exception as e:
+                        logger.warning(f"Failed to get adapter paths for {topic.topic_id}: {e}")
+
+        if not adapter_paths:
+            logger.warning(f"No adapters found to merge for {unit_progress.unit_id}")
+            return
+
+        logger.info(f"Merging {len(adapter_paths)} adapters from {unit_progress.unit_id}")
+
+        try:
+            # Create merge output path
+            merge_output = get_merged_adapter_path(
+                self.config.output_dir,
+                unit_progress.unit_id
+            )
+
+            # Create merge config
+            merge_config = MergeConfig(
+                base_model_path=self.model.config.name_or_path,
+                adapter_path=adapter_paths[0],  # Required but overridden by merge_incremental
+                output_path=str(merge_output),
+                dtype="bfloat16",  # Match training dtype
+                device="auto",
+                verify_merge=True
+            )
+
+            # Perform incremental merge
+            merger = LoRAMerger(merge_config)
+            result = merger.merge_incremental(adapter_paths)
+
+            if result.success:
+                logger.info(
+                    f"Successfully merged {len(adapter_paths)} adapters to {result.output_path} "
+                    f"in {result.merge_time_seconds:.1f}s"
+                )
+                unit_progress.merged = True
+            else:
+                logger.error(f"Merge failed: {result.error_message}")
+
+        except Exception as e:
+            logger.error(f"Failed to merge unit adapters: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
 
     def save_checkpoint(self, progress: Dict) -> Path:
         """
@@ -530,22 +675,38 @@ class PPOPipeline:
             preference_data = self._load_preference_data()
 
         grouped: Dict[str, Dict] = {}
+        prompt_to_topic: Dict[str, str] = {}  # Map prompts to topic IDs
 
-        # Group SFT data
+        # Group SFT data and build prompt-to-topic mapping
         for item in sft_data:
-            topic_id = item.get("topic_id", "unknown")
+            # Support both 'topic_id' and 'source' field names
+            topic_id = item.get("topic_id") or item.get("source", "unknown")
             if topic_id not in grouped:
                 grouped[topic_id] = {
                     "sft_data": [],
                     "preference_pairs": [],
                     "prompts": [],
                 }
-            grouped[topic_id]["sft_data"].append(item)
-            grouped[topic_id]["prompts"].append(item.get("question", ""))
+            # Normalize field names: support both instruction/output and question/answer
+            question = item.get("question") or item.get("instruction", "")
+            normalized_item = {
+                "question": question,
+                "answer": item.get("answer") or item.get("output", ""),
+                "topic_id": topic_id,
+            }
+            grouped[topic_id]["sft_data"].append(normalized_item)
+            grouped[topic_id]["prompts"].append(question)
+            # Build mapping for preference data lookup
+            prompt_to_topic[question] = topic_id
 
-        # Group preference data
+        # Group preference data, using prompt mapping if no topic_id
         for item in preference_data:
-            topic_id = item.get("topic_id", "unknown")
+            # Support both 'topic_id' and 'source' field names
+            topic_id = item.get("topic_id") or item.get("source")
+            # If no topic_id, try to match by prompt
+            if not topic_id:
+                prompt = item.get("prompt", "")
+                topic_id = prompt_to_topic.get(prompt, "unknown")
             if topic_id not in grouped:
                 grouped[topic_id] = {
                     "sft_data": [],

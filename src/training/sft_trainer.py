@@ -45,6 +45,10 @@ class SFTConfig:
     device: str = "mps"
     dtype: str = "float16"
 
+    # Output settings
+    output_dir: Optional[str] = None  # If None, don't save adapters
+    save_adapters: bool = True  # Auto-save after training
+
     def __post_init__(self):
         """Validate configuration."""
         if self.learning_rate <= 0:
@@ -229,9 +233,11 @@ class SFTTrainer:
             self.model.train()
             total_loss = 0.0
             num_steps = 0
+            max_grad_norm = 1.0  # Gradient clipping for stability
 
             for epoch in range(self.config.num_epochs):
                 epoch_loss = 0.0
+                valid_batches = 0
                 for batch in dataloader:
                     # Move to device
                     batch = {k: v.to(self.model.device) for k, v in batch.items()}
@@ -240,8 +246,19 @@ class SFTTrainer:
                     outputs = self.model(**batch)
                     loss = outputs.loss
 
+                    # Skip if loss is NaN (MPS fp16 stability issue)
+                    if torch.isnan(loss) or torch.isinf(loss):
+                        logger.warning(f"NaN/Inf loss detected, skipping batch")
+                        optimizer.zero_grad()
+                        continue
+
                     # Backward pass
                     loss.backward()
+
+                    # Gradient clipping for stability
+                    torch.nn.utils.clip_grad_norm_(
+                        self.model.parameters(), max_grad_norm
+                    )
 
                     # Gradient accumulation
                     if (num_steps + 1) % self.config.gradient_accumulation_steps == 0:
@@ -251,10 +268,12 @@ class SFTTrainer:
                     epoch_loss += loss.item()
                     total_loss += loss.item()
                     num_steps += 1
+                    valid_batches += 1
 
+                avg_epoch_loss = epoch_loss / valid_batches if valid_batches > 0 else float('nan')
                 logger.info(
                     f"Epoch {epoch + 1}/{self.config.num_epochs}, "
-                    f"Loss: {epoch_loss / len(dataloader):.4f}"
+                    f"Loss: {avg_epoch_loss:.4f}"
                 )
 
             final_loss = total_loss / num_steps if num_steps > 0 else 0.0
@@ -303,6 +322,30 @@ class SFTTrainer:
                 f"Topic {topic_id} complete: loss={result.final_loss:.4f}, "
                 f"time={result.training_time_seconds:.1f}s"
             )
+
+            # Auto-save adapter if configured
+            if self.config.save_adapters and self.config.output_dir:
+                try:
+                    from .adapter_utils import get_adapter_paths, parse_topic_id
+
+                    # Parse topic_id to get components
+                    unit_id, chapter_id, topic_name = parse_topic_id(topic_id)
+
+                    # Get adapter path
+                    sft_path, _, _ = get_adapter_paths(
+                        self.config.output_dir,
+                        unit_id,
+                        chapter_id,
+                        topic_name
+                    )
+
+                    # Save adapter
+                    saved_path = self.save_adapter(sft_path)
+                    result.adapter_path = str(saved_path)
+                    logger.info(f"Auto-saved SFT adapter to {saved_path}")
+
+                except Exception as e:
+                    logger.warning(f"Failed to auto-save SFT adapter: {e}")
 
         return result
 

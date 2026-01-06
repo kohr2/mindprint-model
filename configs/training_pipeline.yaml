@@ -1,18 +1,19 @@
 # PPO Training Pipeline Configuration
-# Bob Loukas Mindprint - Mac Studio M2 Ultra (64GB)
+# Mac Studio M3 Ultra (256GB unified memory, 80 GPU cores)
 # Three-phase training: SFT → Reward Model → PPO
 
 # Model
 model:
-  name: google/gemma-3-12b
-  dtype: float16
+  name: google/gemma-3-12b-it
+  dtype: bfloat16  # bfloat16 is more stable than float16, M3 supports it
   device: mps
 
-# SFT settings
+# SFT settings - conservative for stability
 sft:
   epochs_per_topic: 3
-  learning_rate: 3e-4
-  batch_size: 4
+  learning_rate: 0.0001  # Standard LoRA learning rate
+  batch_size: 4  # Conservative batch size
+  gradient_accumulation_steps: 4
   lora_rank: 8
   lora_alpha: 16
   target_modules:
@@ -20,17 +21,27 @@ sft:
     - v_proj
     - o_proj
 
-# Reward model settings
+# Reward model settings - improved for stable convergence
 reward_model:
-  epochs: 1
-  learning_rate: 1e-5
-  batch_size: 4
+  epochs: 3  # Increased from 1 for better convergence
+  learning_rate: 0.00001
+  batch_size: 8  # Increased from 4 to reduce variance
   use_voice_penalty: true
+
+  # Validation and early stopping
+  validation_split: 0.2  # 80/20 train/val split
+  early_stopping_patience: 3  # Stop if no improvement for N epochs
+  early_stopping_delta: 0.01  # Minimum improvement threshold
+
+  # Learning rate scheduling
+  use_lr_scheduler: true
+  scheduler_type: cosine  # cosine, linear, or constant
+  warmup_ratio: 0.1  # 10% warmup steps
 
 # PPO settings
 ppo:
   steps_per_topic: 100
-  learning_rate: 1e-5
+  learning_rate: 0.00001
   batch_size: 4
   ppo_epochs: 4
   kl_penalty: 0.2
