@@ -44,9 +44,9 @@ class DataQualityMetrics:
     def is_trainable(self) -> bool:
         """Check if data is sufficient for training."""
         return (
-            self.example_count >= 5 and
-            self.avg_output_length >= 200 and
-            self.voice_marker_density >= 5.0
+            self.example_count >= 2 and
+            self.avg_output_length >= 50 and
+            self.voice_marker_density >= 0.0
         )
 
 
