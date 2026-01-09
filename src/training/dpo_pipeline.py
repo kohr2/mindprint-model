@@ -380,7 +380,22 @@ class DPOPipeline:
             progress.sft_loss = sft_result.final_loss
 
             # Update model with SFT adapter
-            self.model = sft_trainer.get_model()
+            sft_model = sft_trainer.get_model()
+
+            # Unload SFT adapter to prevent stacking with DPO adapter
+            logger.info("Unloading SFT adapter before DPO training")
+            if hasattr(sft_model, 'merge_and_unload'):
+                self.model = sft_model.merge_and_unload()
+                logger.info("SFT adapter merged and unloaded successfully")
+            elif hasattr(sft_model, 'peft_config'):
+                logger.warning("Model has PEFT adapter but no merge_and_unload method")
+                self.model = sft_model
+            else:
+                # Not a PEFT model, use as-is
+                self.model = sft_model
+
+            # Clear MPS cache after merging
+            mps_empty_cache()
 
             # 2. Evaluate
             eval_result = self._evaluate_topic(topic_data)
