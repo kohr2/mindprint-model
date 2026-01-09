@@ -491,10 +491,13 @@ class DPOPipeline:
 
             questions = topic_data.get("questions", [])
             if not questions:
-                # Create questions from SFT data
+                # Create questions from SFT data (handles both PPO and DPO formats)
                 sft_data = topic_data.get("sft_data", [])
                 questions = [
-                    {"question": d["question"], "reference_answer": d["answer"]}
+                    {
+                        "question": d.get("question", d.get("instruction", "")),
+                        "reference_answer": d.get("answer", d.get("output", ""))
+                    }
                     for d in sft_data
                 ]
 
