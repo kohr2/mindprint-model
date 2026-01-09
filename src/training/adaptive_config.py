@@ -1,7 +1,7 @@
 """
-Adaptive Configuration - Adjust hyperparameters based on data quality.
+Adaptive Configuration - PPO-specific hyperparameter tuning.
 
-Dynamically tunes:
+Dynamically adjusts PPO training based on data quality:
 - Number of training epochs
 - Batch size
 - Learning rate
@@ -18,36 +18,9 @@ from dataclasses import dataclass
 from typing import Dict, List
 import logging
 
+from .data_quality import DataQualityMetrics  # Import from shared
+
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class DataQualityMetrics:
-    """Metrics about training data quality."""
-
-    example_count: int
-    avg_output_length: float
-    voice_marker_density: float  # Percentage
-    preference_quality_score: float  # 0-5 scale
-
-    @property
-    def is_high_quality(self) -> bool:
-        """Check if data meets high quality thresholds."""
-        return (
-            15 <= self.example_count <= 30 and
-            600 <= self.avg_output_length <= 1500 and
-            self.voice_marker_density >= 20.0 and
-            self.preference_quality_score >= 1.5
-        )
-
-    @property
-    def is_trainable(self) -> bool:
-        """Check if data is sufficient for training."""
-        return (
-            self.example_count >= 2 and
-            self.avg_output_length >= 50 and
-            self.voice_marker_density >= 0.0
-        )
 
 
 @dataclass

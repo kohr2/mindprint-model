@@ -111,8 +111,27 @@ class SFTDataset(Dataset):
         """Get a single item."""
         item = self.data[idx]
 
+        # Support both data formats: PPO (question/answer) and DPO (instruction/input/output)
+        if "question" in item and "answer" in item:
+            # PPO format
+            instruction = item["question"]
+            output = item["answer"]
+        elif "instruction" in item and "output" in item:
+            # DPO format
+            instruction = item["instruction"]
+            input_text = item.get("input", "")
+            output = item["output"]
+            # Combine instruction and input if input exists
+            if input_text:
+                instruction = f"{instruction}\n{input_text}"
+        else:
+            raise ValueError(
+                f"Invalid data format. Item must have either 'question'/'answer' "
+                f"or 'instruction'/'output' keys. Got: {list(item.keys())}"
+            )
+
         # Format as instruction-following prompt (Gemma-3 format)
-        prompt = self._format_prompt(item["question"], item["answer"])
+        prompt = self._format_prompt(instruction, output)
 
         # Tokenize
         encoded = self.tokenizer(
@@ -129,12 +148,12 @@ class SFTDataset(Dataset):
             "labels": encoded["input_ids"].squeeze(0),
         }
 
-    def _format_prompt(self, question: str, answer: str) -> str:
+    def _format_prompt(self, instruction: str, output: str) -> str:
         """Format as Gemma-3 instruction prompt."""
         return f"""<start_of_turn>user
-{question}<end_of_turn>
+{instruction}<end_of_turn>
 <start_of_turn>model
-{answer}<end_of_turn>"""
+{output}<end_of_turn>"""
 
 
 class SFTTrainer:

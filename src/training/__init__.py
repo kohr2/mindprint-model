@@ -1,8 +1,8 @@
 """
 Training module for Bob Loukas mindprint RLHF.
 
-Contains LoRA adapter merging, training utilities, and MPS support.
-PPO-specific: includes reward model and PPO trainer.
+Shared infrastructure from 'shared' branch + PPO-specific components.
+Contains LoRA adapter merging, training utilities, MPS support, and PPO trainer.
 """
 
 from .merge import MergeConfig, MergeResult, LoRAMerger
@@ -21,6 +21,12 @@ from .reward_model import (
     RewardModel,
     RewardModelTrainer,
 )
+from .adapter_utils import (
+    get_adapter_paths,
+    get_merged_adapter_path,
+    parse_topic_id,
+)
+from .data_quality import DataQualityMetrics
 from .ppo_trainer import PPOConfig, PPOResult, PPOTrainer
 from .ppo_pipeline import (
     TopicStatus,
@@ -50,6 +56,10 @@ __all__ = [
     "RewardResult",
     "RewardModel",
     "RewardModelTrainer",
+    "get_adapter_paths",
+    "get_merged_adapter_path",
+    "parse_topic_id",
+    "DataQualityMetrics",
     "PPOConfig",
     "PPOResult",
     "PPOTrainer",
