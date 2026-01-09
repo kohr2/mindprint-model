@@ -4,7 +4,7 @@
 
 # Model
 model:
-  name: google/gemma-3-12b
+  name: Qwen/Qwen2.5-7B-Instruct
   dtype: float16
   device: mps
 
