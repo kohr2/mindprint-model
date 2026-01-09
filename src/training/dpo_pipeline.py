@@ -17,6 +17,7 @@ from enum import Enum
 import logging
 import time
 import json
+import traceback
 
 import torch
 from transformers import PreTrainedModel, PreTrainedTokenizer
@@ -444,6 +445,7 @@ class DPOPipeline:
 
         except Exception as e:
             logger.error(f"Topic {topic_id} training failed: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             progress.status = TopicStatus.FAILED
             progress.training_time_seconds = time.time() - start_time
             return progress

@@ -11,7 +11,7 @@ model:
 # SFT settings
 sft:
   epochs_per_topic: 3
-  learning_rate: 3e-4
+  learning_rate: 0.0003  # 3e-4
   batch_size: 4
   lora_rank: 8
   lora_alpha: 16
@@ -23,7 +23,7 @@ sft:
 # DPO settings
 dpo:
   steps_per_topic: 100
-  learning_rate: 5e-7
+  learning_rate: 0.0000005  # 5e-7
   batch_size: 2
   beta: 0.1
   lora_rank: 1
