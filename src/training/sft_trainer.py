@@ -1,28 +1,22 @@
 """
-SFTTrainer - Supervised Fine-Tuning for Bob Loukas mindprint.
+SFT (Supervised Fine-Tuning) Trainer for Bob Loukas Mindprint.
 
-Trains on Q&A pairs from the textbook before DPO refinement.
+Implements LoRA-based supervised fine-tuning on Q&A pairs.
 Optimized for Mac Studio M2 Ultra (MPS backend, fp16).
 """
 
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Dict, Optional, Any
-import logging
 import time
+import logging
 
 import torch
-from torch.utils.data import Dataset
-from transformers import (
-    PreTrainedModel,
-    PreTrainedTokenizer,
-    TrainingArguments,
-    Trainer,
-    DataCollatorForLanguageModeling,
-)
-from peft import LoraConfig, get_peft_model, TaskType
+from torch.utils.data import Dataset, DataLoader
+from transformers import PreTrainedModel, PreTrainedTokenizer
+from peft import get_peft_model, LoraConfig, TaskType
 
-from .mps_utils import get_mps_device, mps_empty_cache
+from .mps_utils import mps_empty_cache
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +29,8 @@ class SFTConfig:
     learning_rate: float = 3e-4
     num_epochs: int = 3
     per_device_batch_size: int = 4
-    gradient_accumulation_steps: int = 2
+    gradient_accumulation_steps: int = 4
     warmup_ratio: float = 0.1
-    weight_decay: float = 0.01
     max_seq_length: int = 2048
 
     # LoRA configuration
@@ -48,28 +41,27 @@ class SFTConfig:
         default_factory=lambda: ["q_proj", "v_proj", "o_proj"]
     )
 
-    # MPS-specific
-    use_mps: bool = True
-    gradient_checkpointing: bool = True
-    fp16: bool = True
-    bf16: bool = False  # MPS prefers fp16 over bf16
+    # Device settings
+    device: str = "mps"
+    dtype: str = "float16"
 
-    # Output
-    output_dir: str = "./sft_output"
-    save_steps: int = 100
-    logging_steps: int = 10
+    # Output settings
+    output_dir: Optional[str] = None  # If None, don't save adapters
+    save_adapters: bool = True  # Auto-save after training
 
-    def __post_init__(self) -> None:
+    def __post_init__(self):
         """Validate configuration."""
-        assert self.learning_rate > 0, "Learning rate must be positive"
-        assert self.num_epochs > 0, "Number of epochs must be positive"
-        assert self.per_device_batch_size > 0, "Batch size must be positive"
-        assert self.lora_r > 0, "LoRA rank must be positive"
+        if self.learning_rate <= 0:
+            raise ValueError("learning_rate must be positive")
+        if self.num_epochs <= 0:
+            raise ValueError("num_epochs must be positive")
+        if self.per_device_batch_size <= 0:
+            raise ValueError("per_device_batch_size must be positive")
 
 
 @dataclass
 class SFTResult:
-    """Result from SFT training."""
+    """Result of SFT training."""
 
     success: bool
     adapter_path: str
@@ -78,121 +70,100 @@ class SFTResult:
     samples_trained: int
     error_message: Optional[str] = None
 
+    def to_dict(self) -> Dict:
+        """Convert to dictionary."""
+        return {
+            "success": self.success,
+            "adapter_path": self.adapter_path,
+            "final_loss": self.final_loss,
+            "training_time_seconds": self.training_time_seconds,
+            "samples_trained": self.samples_trained,
+            "error_message": self.error_message,
+        }
+
 
 class SFTDataset(Dataset):
-    """Dataset for SFT training from Q&A pairs."""
-
-    GEMMA_USER = "<start_of_turn>user\n"
-    GEMMA_MODEL = "<start_of_turn>model\n"
-    GEMMA_END = "<end_of_turn>\n"
-
-    CHATML_SYSTEM = "<|im_start|>system\n"
-    CHATML_USER = "<|im_start|>user\n"
-    CHATML_ASSISTANT = "<|im_start|>assistant\n"
-    CHATML_END = "<|im_end|>\n"
+    """Dataset for SFT training on Q&A pairs."""
 
     def __init__(
         self,
         data: List[Dict],
         tokenizer: PreTrainedTokenizer,
         max_length: int = 2048,
-        prompt_format: str = "gemma",
     ):
         """
-        Initialize SFT dataset.
+        Initialize the dataset.
 
         Args:
-            data: List of dicts with "instruction", "input", "output" keys
-            tokenizer: Tokenizer for the model
+            data: List of dicts with 'question' and 'answer' keys
+            tokenizer: Tokenizer for encoding
             max_length: Maximum sequence length
-            prompt_format: "gemma" or "chatml"
         """
         self.data = data
         self.tokenizer = tokenizer
         self.max_length = max_length
-        self.prompt_format = prompt_format
 
     def __len__(self) -> int:
+        """Return dataset size."""
         return len(self.data)
 
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
+        """Get a single item."""
         item = self.data[idx]
-        instruction = item.get("instruction", "")
-        input_text = item.get("input", "")
-        output = item.get("output", "")
 
-        # Format the prompt
-        formatted = self._format_prompt(instruction, input_text, output)
+        # Support both data formats: PPO (question/answer) and DPO (instruction/input/output)
+        if "question" in item and "answer" in item:
+            # PPO format
+            instruction = item["question"]
+            output = item["answer"]
+        elif "instruction" in item and "output" in item:
+            # DPO format
+            instruction = item["instruction"]
+            input_text = item.get("input", "")
+            output = item["output"]
+            # Combine instruction and input if input exists
+            if input_text:
+                instruction = f"{instruction}\n{input_text}"
+        else:
+            raise ValueError(
+                f"Invalid data format. Item must have either 'question'/'answer' "
+                f"or 'instruction'/'output' keys. Got: {list(item.keys())}"
+            )
+
+        # Format as instruction-following prompt (Gemma-3 format)
+        prompt = self._format_prompt(instruction, output)
 
         # Tokenize
-        encoding = self.tokenizer(
-            formatted,
+        encoded = self.tokenizer(
+            prompt,
             truncation=True,
             max_length=self.max_length,
             padding="max_length",
             return_tensors="pt",
         )
 
-        # Squeeze to remove batch dimension
-        input_ids = encoding["input_ids"].squeeze(0)
-        attention_mask = encoding["attention_mask"].squeeze(0)
-
-        # Labels are same as input_ids for causal LM
-        labels = input_ids.clone()
-
         return {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "labels": labels,
+            "input_ids": encoded["input_ids"].squeeze(0),
+            "attention_mask": encoded["attention_mask"].squeeze(0),
+            "labels": encoded["input_ids"].squeeze(0),
         }
 
-    def _format_prompt(self, instruction: str, input_text: str, output: str) -> str:
-        """Format as model-specific prompt."""
-        if self.prompt_format == "gemma":
-            return self._format_gemma(instruction, input_text, output)
-        elif self.prompt_format == "chatml":
-            return self._format_chatml(instruction, input_text, output)
-        else:
-            # Simple format
-            if input_text:
-                return f"### Instruction:\n{instruction}\n\n### Input:\n{input_text}\n\n### Response:\n{output}"
-            else:
-                return f"### Instruction:\n{instruction}\n\n### Response:\n{output}"
-
-    def _format_gemma(self, instruction: str, input_text: str, output: str) -> str:
-        """Format for Gemma models."""
-        if input_text:
-            user_content = f"{instruction}\n\n{input_text}"
-        else:
-            user_content = instruction
-
-        return (
-            f"{self.GEMMA_USER}{user_content}{self.GEMMA_END}"
-            f"{self.GEMMA_MODEL}{output}{self.GEMMA_END}"
-        )
-
-    def _format_chatml(self, instruction: str, input_text: str, output: str) -> str:
-        """Format for ChatML-style models."""
-        if input_text:
-            user_content = f"{instruction}\n\n{input_text}"
-        else:
-            user_content = instruction
-
-        return (
-            f"{self.CHATML_USER}{user_content}{self.CHATML_END}"
-            f"{self.CHATML_ASSISTANT}{output}{self.CHATML_END}"
-        )
+    def _format_prompt(self, instruction: str, output: str) -> str:
+        """Format as Gemma-3 instruction prompt."""
+        return f"""<start_of_turn>user
+{instruction}<end_of_turn>
+<start_of_turn>model
+{output}<end_of_turn>"""
 
 
 class SFTTrainer:
     """
-    Supervised Fine-Tuning trainer for mindprint.
+    Supervised Fine-Tuning trainer with LoRA.
 
     Features:
-    - LoRA fine-tuning (not full model)
-    - MPS-optimized training loop
-    - fp16 mixed precision
-    - Gradient checkpointing for memory efficiency
+    - LoRA adapter training (rank-8 default)
+    - Topic-level training with isolated adapters
+    - MPS-optimized for Mac Studio M2 Ultra
     """
 
     def __init__(
@@ -202,61 +173,45 @@ class SFTTrainer:
         config: SFTConfig,
     ):
         """
-        Initialize SFT trainer.
+        Initialize the trainer.
 
         Args:
-            model: Base model (will be wrapped with LoRA)
+            model: Base model to fine-tune
             tokenizer: Tokenizer for the model
-            config: SFT configuration
+            config: Training configuration
         """
         self.base_model = model
         self.tokenizer = tokenizer
         self.config = config
-        self.peft_model: Optional[PreTrainedModel] = None
+        self.model: Optional[Any] = None  # PEFT model after preparation
 
         # Ensure tokenizer has pad token
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
-    def prepare_model(self) -> PreTrainedModel:
-        """
-        Prepare model for training with LoRA.
-
-        Returns:
-            Model with LoRA adapters attached
-        """
+    def _prepare_model(self) -> None:
+        """Prepare model with LoRA adapter."""
         lora_config = LoraConfig(
             r=self.config.lora_r,
             lora_alpha=self.config.lora_alpha,
-            target_modules=self.config.target_modules,
             lora_dropout=self.config.lora_dropout,
+            target_modules=self.config.target_modules,
             task_type=TaskType.CAUSAL_LM,
+            bias="none",
         )
 
-        self.peft_model = get_peft_model(self.base_model, lora_config)
-
-        # Enable gradient checkpointing if configured
-        if self.config.gradient_checkpointing:
-            self.peft_model.enable_input_require_grads()
-
+        self.model = get_peft_model(self.base_model, lora_config)
         logger.info(
-            f"Prepared LoRA model with r={self.config.lora_r}, "
+            f"Created LoRA adapter: r={self.config.lora_r}, "
             f"alpha={self.config.lora_alpha}"
         )
 
-        return self.peft_model
-
-    def train(
-        self,
-        train_data: List[Dict],
-        eval_data: Optional[List[Dict]] = None,
-    ) -> SFTResult:
+    def train(self, train_data: List[Dict]) -> SFTResult:
         """
-        Train on SFT data.
+        Train on Q&A data.
 
         Args:
-            train_data: Training Q&A pairs with instruction/input/output
-            eval_data: Optional evaluation Q&A pairs
+            train_data: List of dicts with 'question' and 'answer' keys
 
         Returns:
             SFTResult with training outcome
@@ -264,72 +219,91 @@ class SFTTrainer:
         start_time = time.time()
 
         try:
-            # Prepare model if not already done
-            if self.peft_model is None:
-                self.prepare_model()
-
-            # Create datasets
-            train_dataset = SFTDataset(
-                train_data,
-                self.tokenizer,
-                max_length=self.config.max_seq_length,
-            )
-
-            eval_dataset = None
-            if eval_data:
-                eval_dataset = SFTDataset(
-                    eval_data,
-                    self.tokenizer,
-                    max_length=self.config.max_seq_length,
+            if not train_data:
+                return SFTResult(
+                    success=False,
+                    adapter_path="",
+                    final_loss=0.0,
+                    training_time_seconds=0.0,
+                    samples_trained=0,
+                    error_message="No training data provided",
                 )
 
-            # Create training arguments
-            training_args = TrainingArguments(
-                output_dir=self.config.output_dir,
-                num_train_epochs=self.config.num_epochs,
-                per_device_train_batch_size=self.config.per_device_batch_size,
-                gradient_accumulation_steps=self.config.gradient_accumulation_steps,
-                learning_rate=self.config.learning_rate,
-                warmup_ratio=self.config.warmup_ratio,
-                weight_decay=self.config.weight_decay,
-                logging_steps=self.config.logging_steps,
-                save_steps=self.config.save_steps,
-                fp16=self.config.fp16,
-                bf16=self.config.bf16,
-                gradient_checkpointing=self.config.gradient_checkpointing,
-                remove_unused_columns=False,
-                report_to="none",  # Disable wandb etc for now
+            # Prepare model with LoRA
+            self._prepare_model()
+
+            # Create dataset and dataloader
+            dataset = SFTDataset(
+                train_data, self.tokenizer, self.config.max_seq_length
+            )
+            dataloader = DataLoader(
+                dataset,
+                batch_size=self.config.per_device_batch_size,
+                shuffle=True,
             )
 
-            # Create data collator
-            data_collator = DataCollatorForLanguageModeling(
-                tokenizer=self.tokenizer,
-                mlm=False,  # Causal LM, not masked LM
+            # Setup optimizer
+            optimizer = torch.optim.AdamW(
+                self.model.parameters(),
+                lr=self.config.learning_rate,
             )
 
-            # Create trainer
-            trainer = Trainer(
-                model=self.peft_model,
-                args=training_args,
-                train_dataset=train_dataset,
-                eval_dataset=eval_dataset,
-                data_collator=data_collator,
-            )
+            # Training loop
+            self.model.train()
+            total_loss = 0.0
+            num_steps = 0
+            max_grad_norm = 1.0  # Gradient clipping for stability
 
-            # Train
-            train_result = trainer.train()
+            for epoch in range(self.config.num_epochs):
+                epoch_loss = 0.0
+                valid_batches = 0
+                for batch in dataloader:
+                    # Move to device
+                    batch = {k: v.to(self.model.device) for k, v in batch.items()}
 
-            # Clear cache after training
-            mps_empty_cache()
+                    # Forward pass
+                    outputs = self.model(**batch)
+                    loss = outputs.loss
 
+                    # Skip if loss is NaN (MPS fp16 stability issue)
+                    if torch.isnan(loss) or torch.isinf(loss):
+                        logger.warning(f"NaN/Inf loss detected, skipping batch")
+                        optimizer.zero_grad()
+                        continue
+
+                    # Backward pass
+                    loss.backward()
+
+                    # Gradient clipping for stability
+                    torch.nn.utils.clip_grad_norm_(
+                        self.model.parameters(), max_grad_norm
+                    )
+
+                    # Gradient accumulation
+                    if (num_steps + 1) % self.config.gradient_accumulation_steps == 0:
+                        optimizer.step()
+                        optimizer.zero_grad()
+
+                    epoch_loss += loss.item()
+                    total_loss += loss.item()
+                    num_steps += 1
+                    valid_batches += 1
+
+                avg_epoch_loss = epoch_loss / valid_batches if valid_batches > 0 else float('nan')
+                logger.info(
+                    f"Epoch {epoch + 1}/{self.config.num_epochs}, "
+                    f"Loss: {avg_epoch_loss:.4f}"
+                )
+
+            final_loss = total_loss / num_steps if num_steps > 0 else 0.0
             training_time = time.time() - start_time
 
             return SFTResult(
                 success=True,
-                adapter_path=self.config.output_dir,
-                final_loss=train_result.training_loss,
+                adapter_path="",
+                final_loss=final_loss,
                 training_time_seconds=training_time,
-                samples_trained=len(train_data),
+                samples_trained=len(train_data) * self.config.num_epochs,
             )
 
         except Exception as e:
@@ -343,61 +317,83 @@ class SFTTrainer:
                 error_message=str(e),
             )
 
+        finally:
+            mps_empty_cache()
+
     def train_on_topic(
-        self,
-        topic_data: Dict,
-        topic_identifier: str,
+        self, topic_data: List[Dict], topic_id: str
     ) -> SFTResult:
         """
-        Train on a single topic's data.
+        Train on a single topic's Q&A data.
 
         Args:
-            topic_data: Dict with topic questions and answers
-            topic_identifier: e.g., "unit-01/chapter-01/topic-01"
+            topic_data: Q&A pairs for this topic
+            topic_id: Unique identifier for the topic
 
         Returns:
-            SFTResult for this topic
+            SFTResult with training outcome
         """
-        # Convert topic data to SFT format
-        sft_data = []
-        questions = topic_data.get("questions", [])
+        logger.info(f"Training on topic: {topic_id}")
+        result = self.train(topic_data)
 
-        for q in questions:
-            sft_data.append(
-                {
-                    "instruction": q.get("question", ""),
-                    "input": "",
-                    "output": q.get("reference_answer", ""),
-                }
+        if result.success:
+            logger.info(
+                f"Topic {topic_id} complete: loss={result.final_loss:.4f}, "
+                f"time={result.training_time_seconds:.1f}s"
             )
 
-        logger.info(f"Training on topic {topic_identifier} with {len(sft_data)} examples")
+            # Auto-save adapter if configured
+            if self.config.save_adapters and self.config.output_dir:
+                try:
+                    from .adapter_utils import get_adapter_paths, parse_topic_id
 
-        return self.train(sft_data)
+                    # Parse topic_id to get components
+                    unit_id, chapter_id, topic_name = parse_topic_id(topic_id)
 
-    def save_adapter(self, path: str) -> Path:
+                    # Get adapter path
+                    sft_path, _, _ = get_adapter_paths(
+                        self.config.output_dir,
+                        unit_id,
+                        chapter_id,
+                        topic_name
+                    )
+
+                    # Save adapter
+                    saved_path = self.save_adapter(sft_path)
+                    result.adapter_path = str(saved_path)
+                    logger.info(f"Auto-saved SFT adapter to {saved_path}")
+
+                except Exception as e:
+                    logger.warning(f"Failed to auto-save SFT adapter: {e}")
+
+        return result
+
+    def save_adapter(self, path: Path) -> Path:
         """
-        Save LoRA adapter to disk.
+        Save the LoRA adapter.
 
         Args:
-            path: Output path for adapter
+            path: Directory to save adapter
 
         Returns:
             Path to saved adapter
         """
-        if self.peft_model is None:
-            raise ValueError("Model not prepared. Call prepare_model() first.")
+        if self.model is None:
+            raise ValueError("No model to save. Train first.")
 
-        output_path = Path(path)
-        output_path.mkdir(parents=True, exist_ok=True)
-
-        self.peft_model.save_pretrained(output_path)
-        logger.info(f"Saved adapter to {output_path}")
-
-        return output_path
+        path = Path(path)
+        path.mkdir(parents=True, exist_ok=True)
+        self.model.save_pretrained(path)
+        logger.info(f"Saved adapter to {path}")
+        return path
 
     def get_model(self) -> PreTrainedModel:
-        """Get the current model (with LoRA)."""
-        if self.peft_model is None:
-            raise ValueError("Model not prepared. Call prepare_model() first.")
-        return self.peft_model
+        """
+        Get the trained model with LoRA adapter.
+
+        Returns:
+            PEFT model with trained adapter
+        """
+        if self.model is None:
+            raise ValueError("No trained model. Train first.")
+        return self.model

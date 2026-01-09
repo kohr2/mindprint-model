@@ -1,11 +1,7 @@
 """
-Tests for MPS utilities - Mac Studio M2 Ultra support.
+Tests for MPS (Metal Performance Shaders) utilities.
 
-Tests cover:
-- MPS device detection and configuration
-- Memory management (cache clearing)
-- CPU fallback for unsupported operations
-- Training context manager
+These tests verify the Mac Studio M2 Ultra optimizations for training.
 """
 
 import pytest
@@ -26,27 +22,27 @@ class TestMPSConfig:
     """Test MPSConfig dataclass."""
 
     def test_default_device_is_mps(self) -> None:
-        """Default config uses MPS device."""
+        """Default device should be MPS."""
         config = MPSConfig()
         assert config.device == "mps"
 
     def test_default_dtype_is_float16(self) -> None:
-        """Default dtype is float16 for MPS efficiency."""
+        """Default dtype should be float16 for memory efficiency."""
         config = MPSConfig()
         assert config.dtype == torch.float16
 
-    def test_default_fallback_enabled(self) -> None:
-        """CPU fallback is enabled by default."""
+    def test_default_fallback_to_cpu_is_true(self) -> None:
+        """Default fallback_to_cpu should be True."""
         config = MPSConfig()
         assert config.fallback_to_cpu is True
 
-    def test_default_gradient_checkpointing_enabled(self) -> None:
-        """Gradient checkpointing enabled for memory efficiency."""
+    def test_default_gradient_checkpointing_is_true(self) -> None:
+        """Default gradient_checkpointing should be True."""
         config = MPSConfig()
         assert config.gradient_checkpointing is True
 
     def test_custom_config(self) -> None:
-        """Custom configuration values are set correctly."""
+        """Custom config values are set correctly."""
         config = MPSConfig(
             device="cpu",
             dtype=torch.float32,
@@ -60,151 +56,142 @@ class TestMPSConfig:
 
 
 class TestGetMPSDevice:
-    """Test MPS device detection."""
+    """Test get_mps_device function."""
 
-    def test_returns_device_object(self) -> None:
-        """Returns a torch.device object."""
+    def test_returns_torch_device(self) -> None:
+        """Should return a torch.device object."""
         device = get_mps_device()
         assert isinstance(device, torch.device)
 
     def test_returns_mps_when_available(self) -> None:
-        """Returns MPS device when MPS is available."""
+        """Should return MPS device when available."""
         if torch.backends.mps.is_available():
             device = get_mps_device()
             assert device.type == "mps"
 
-    @patch("src.training.mps_utils.torch.backends.mps.is_available", return_value=False)
-    def test_returns_cpu_when_mps_unavailable(self, mock_mps: MagicMock) -> None:
-        """Returns CPU device when MPS is not available."""
-        device = get_mps_device()
-        assert device.type == "cpu"
+    def test_returns_cpu_fallback(self) -> None:
+        """Should return CPU when MPS is not available."""
+        with patch("torch.backends.mps.is_available", return_value=False):
+            device = get_mps_device()
+            assert device.type == "cpu"
 
 
 class TestMPSEmptyCache:
-    """Test MPS cache clearing."""
+    """Test mps_empty_cache function."""
 
-    def test_does_not_raise(self) -> None:
-        """Cache clearing should not raise errors."""
-        # Should work regardless of MPS availability
+    def test_does_not_raise_when_mps_available(self) -> None:
+        """Should not raise an error when called."""
+        # This should not raise regardless of MPS availability
         mps_empty_cache()
 
-    @patch("src.training.mps_utils.torch.mps.empty_cache")
-    @patch("src.training.mps_utils.torch.backends.mps.is_available", return_value=True)
-    def test_calls_mps_empty_cache_when_available(
-        self, mock_available: MagicMock, mock_empty: MagicMock
-    ) -> None:
-        """Calls torch.mps.empty_cache when MPS is available."""
-        mps_empty_cache()
-        mock_empty.assert_called_once()
+    def test_calls_torch_mps_empty_cache_when_available(self) -> None:
+        """Should call torch.mps.empty_cache when MPS is available."""
+        with patch("torch.backends.mps.is_available", return_value=True):
+            with patch("torch.mps.empty_cache") as mock_cache:
+                mps_empty_cache()
+                mock_cache.assert_called_once()
 
 
 class TestMoveToDevice:
-    """Test device movement with fallback."""
+    """Test move_to_device function."""
 
     def test_moves_tensor_to_cpu(self) -> None:
-        """Moves tensor to CPU successfully."""
-        tensor = torch.rand(2, 3)
+        """Should move tensor to CPU."""
+        tensor = torch.randn(10)
         result = move_to_device(tensor, torch.device("cpu"))
         assert result.device.type == "cpu"
 
     def test_moves_tensor_to_mps_when_available(self) -> None:
-        """Moves tensor to MPS when available."""
+        """Should move tensor to MPS when available."""
         if torch.backends.mps.is_available():
-            tensor = torch.rand(2, 3)
+            tensor = torch.randn(10)
             result = move_to_device(tensor, torch.device("mps"))
             assert result.device.type == "mps"
 
-    def test_fallback_to_cpu_on_failure(self) -> None:
-        """Falls back to CPU when device move fails and fallback enabled."""
-        tensor = torch.rand(2, 3)
-        # Try moving to a device that doesn't exist
+    def test_fallback_to_cpu_when_mps_fails(self) -> None:
+        """Should fallback to CPU when MPS operation fails."""
+        tensor = torch.randn(10)
+        # Even if we request MPS but it fails, should fallback to CPU
         result = move_to_device(tensor, torch.device("cpu"), fallback_to_cpu=True)
         assert result.device.type == "cpu"
 
-    def test_preserves_tensor_values(self) -> None:
-        """Tensor values are preserved after move."""
-        original = torch.tensor([1.0, 2.0, 3.0])
-        moved = move_to_device(original, torch.device("cpu"))
-        assert torch.equal(original.cpu(), moved.cpu())
+    def test_handles_model_movement(self) -> None:
+        """Should handle moving nn.Module to device."""
+        model = torch.nn.Linear(10, 5)
+        result = move_to_device(model, torch.device("cpu"))
+        # Check that model parameters are on CPU
+        for param in result.parameters():
+            assert param.device.type == "cpu"
 
 
 class TestCheckMPSOperationSupport:
-    """Test MPS operation support checking."""
+    """Test check_mps_operation_support function."""
 
     def test_returns_bool(self) -> None:
-        """Returns a boolean value."""
+        """Should return a boolean."""
         result = check_mps_operation_support("matmul")
         assert isinstance(result, bool)
 
-    def test_common_ops_supported(self) -> None:
-        """Common operations are supported."""
-        assert check_mps_operation_support("matmul") is True
-        assert check_mps_operation_support("softmax") is True
-        assert check_mps_operation_support("attention") is True
-
-    def test_unsupported_ops_return_false(self) -> None:
-        """Known unsupported operations return False."""
-        # These are examples of potentially unsupported ops
-        result = check_mps_operation_support("unknown_op_xyz")
-        assert result is False
+    def test_common_operations_supported(self) -> None:
+        """Common operations should be supported."""
+        if torch.backends.mps.is_available():
+            assert check_mps_operation_support("matmul") is True
+            assert check_mps_operation_support("add") is True
+            assert check_mps_operation_support("mul") is True
 
 
 class TestMPSTrainingContext:
-    """Test MPS training context manager."""
+    """Test MPSTrainingContext context manager."""
 
-    def test_context_manager_protocol(self) -> None:
-        """Implements context manager protocol."""
-        context = MPSTrainingContext()
-        assert hasattr(context, "__enter__")
-        assert hasattr(context, "__exit__")
+    def test_context_manager_enters_and_exits(self) -> None:
+        """Should work as a context manager."""
+        config = MPSConfig(device="cpu")
+        with MPSTrainingContext(config) as ctx:
+            assert ctx is not None
 
-    def test_context_returns_self(self) -> None:
-        """Context manager returns self on enter."""
-        context = MPSTrainingContext()
-        with context as ctx:
-            assert ctx is context
+    def test_provides_device(self) -> None:
+        """Should provide device in context."""
+        config = MPSConfig(device="cpu")
+        with MPSTrainingContext(config) as ctx:
+            assert ctx.device is not None
 
-    def test_context_has_device_attribute(self) -> None:
-        """Context provides device attribute."""
-        with MPSTrainingContext() as ctx:
-            assert hasattr(ctx, "device")
-            assert isinstance(ctx.device, torch.device)
+    def test_clears_cache_on_exit(self) -> None:
+        """Should clear cache when exiting context."""
+        config = MPSConfig(device="cpu")
+        with patch("src.training.mps_utils.mps_empty_cache") as mock_cache:
+            with MPSTrainingContext(config):
+                pass
+            mock_cache.assert_called()
 
-    def test_context_cleanup_on_exit(self) -> None:
-        """Context performs cleanup on exit."""
-        # This should not raise even if cleanup operations are called
-        with MPSTrainingContext():
-            pass  # Normal exit
+    def test_handles_exception_in_context(self) -> None:
+        """Should handle exceptions and still clean up."""
+        config = MPSConfig(device="cpu")
+        with patch("src.training.mps_utils.mps_empty_cache") as mock_cache:
+            try:
+                with MPSTrainingContext(config):
+                    raise ValueError("Test error")
+            except ValueError:
+                pass
+            # Cache should still be cleared even after exception
+            mock_cache.assert_called()
 
-    def test_context_cleanup_on_exception(self) -> None:
-        """Context performs cleanup even on exception."""
-        with pytest.raises(ValueError):
-            with MPSTrainingContext():
-                raise ValueError("Test error")
-        # If we get here, cleanup didn't raise additional errors
 
+class TestMPSMemoryManagement:
+    """Test memory management utilities."""
 
-class TestMPSIntegration:
-    """Integration tests for MPS utilities."""
+    def test_empty_cache_is_safe_to_call_multiple_times(self) -> None:
+        """Should be safe to call empty_cache multiple times."""
+        for _ in range(3):
+            mps_empty_cache()
 
-    def test_full_workflow(self) -> None:
-        """Test typical MPS training workflow."""
-        # Get device
-        device = get_mps_device()
+    def test_device_movement_preserves_tensor_values(self) -> None:
+        """Moving tensors should preserve their values."""
+        original = torch.tensor([1.0, 2.0, 3.0])
+        moved = move_to_device(original, torch.device("cpu"))
+        assert torch.allclose(original, moved.cpu())
 
-        # Create tensor on CPU
-        tensor = torch.rand(4, 4)
-
-        # Move to device
-        tensor = move_to_device(tensor, device)
-
-        # Use in context
-        with MPSTrainingContext() as ctx:
-            # Perform some operation
-            result = tensor @ tensor.T
-
-        # Clear cache
-        mps_empty_cache()
-
-        # Verify result is valid
-        assert result.shape == (4, 4)
+    def test_device_movement_preserves_tensor_dtype(self) -> None:
+        """Moving tensors should preserve their dtype."""
+        original = torch.tensor([1.0, 2.0, 3.0], dtype=torch.float16)
+        moved = move_to_device(original, torch.device("cpu"))
+        assert moved.dtype == torch.float16

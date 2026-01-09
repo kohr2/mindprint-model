@@ -1,56 +1,28 @@
 """
-MPS utilities for Mac Studio M2 Ultra training.
+MPS (Metal Performance Shaders) utilities for Mac Studio M2 Ultra.
 
-Handles MPS-specific operations, memory management, and CPU fallbacks
-for operations not supported on MPS.
-
-Optimized for:
-- Mac Studio M2 Ultra (64GB unified memory)
-- PyTorch MPS backend
-- float16 precision (no quantization needed)
+Provides optimized training utilities for Apple Silicon:
+- MPS device detection with CPU fallback
+- Memory management (cache clearing)
+- Safe tensor/model movement between devices
+- Training context manager for clean resource handling
 """
 
 from dataclasses import dataclass
-from typing import Union, Set
+from typing import Union, Optional
 import logging
 
 import torch
-from torch import Tensor
+from torch import nn
 
 logger = logging.getLogger(__name__)
-
-# Operations known to be supported on MPS
-SUPPORTED_OPS: Set[str] = {
-    "matmul",
-    "softmax",
-    "attention",
-    "linear",
-    "layernorm",
-    "embedding",
-    "gelu",
-    "relu",
-    "dropout",
-    "cross_entropy",
-    "mse",
-}
-
-# Operations known to have issues on MPS
-UNSUPPORTED_OPS: Set[str] = {
-    "scatter_reduce",  # Some indexing operations
-    "complex_gather",  # Complex tensor indexing
-    "sparse_matmul",  # Sparse operations
-}
 
 
 @dataclass
 class MPSConfig:
-    """Configuration for MPS backend.
+    """Configuration for MPS training.
 
-    Attributes:
-        device: Target device ("mps" or "cpu")
-        dtype: Tensor dtype (float16 recommended for MPS)
-        fallback_to_cpu: Whether to fall back to CPU on failures
-        gradient_checkpointing: Enable gradient checkpointing for memory
+    Optimized defaults for Mac Studio M2 Ultra (64GB unified memory).
     """
 
     device: str = "mps"
@@ -61,15 +33,13 @@ class MPSConfig:
 
 def get_mps_device() -> torch.device:
     """
-    Get MPS device with validation.
-
-    Returns MPS device if available, CPU otherwise.
+    Get the best available device, preferring MPS.
 
     Returns:
-        torch.device: MPS device if available, CPU otherwise
+        torch.device: MPS if available, otherwise CPU
     """
     if torch.backends.mps.is_available():
-        logger.debug("MPS device available, using MPS")
+        logger.info("MPS device available, using Apple Silicon GPU")
         return torch.device("mps")
     else:
         logger.warning("MPS not available, falling back to CPU")
@@ -80,66 +50,72 @@ def mps_empty_cache() -> None:
     """
     Clear MPS memory cache.
 
-    Equivalent to torch.cuda.empty_cache() for MPS.
-    Should be called between training phases to prevent memory buildup.
+    Safe to call even when MPS is not available.
     """
     if torch.backends.mps.is_available():
         try:
             torch.mps.empty_cache()
-            logger.debug("MPS cache cleared")
+            logger.debug("Cleared MPS cache")
         except Exception as e:
             logger.warning(f"Failed to clear MPS cache: {e}")
 
 
 def move_to_device(
-    tensor_or_model: Union[Tensor, torch.nn.Module],
+    tensor_or_model: Union[torch.Tensor, nn.Module],
     device: torch.device,
     fallback_to_cpu: bool = True,
-) -> Union[Tensor, torch.nn.Module]:
+) -> Union[torch.Tensor, nn.Module]:
     """
-    Move tensor or model to device with fallback.
-
-    Some operations fail on MPS and need CPU fallback.
+    Safely move a tensor or model to the specified device.
 
     Args:
-        tensor_or_model: Tensor or model to move
+        tensor_or_model: Tensor or nn.Module to move
         device: Target device
-        fallback_to_cpu: If True, fall back to CPU on failure
+        fallback_to_cpu: If True, fallback to CPU on failure
 
     Returns:
-        Tensor or model on target device
+        Tensor or model on the target device
     """
     try:
         return tensor_or_model.to(device)
     except Exception as e:
         if fallback_to_cpu and device.type != "cpu":
             logger.warning(f"Failed to move to {device}, falling back to CPU: {e}")
-            return tensor_or_model.to("cpu")
+            return tensor_or_model.to(torch.device("cpu"))
         raise
 
 
 def check_mps_operation_support(operation: str) -> bool:
     """
-    Check if an operation is supported on MPS.
+    Check if a specific operation is supported on MPS.
 
     Args:
-        operation: Name of operation to check
+        operation: Name of the operation to check
 
     Returns:
-        True if supported, False otherwise
+        True if the operation is supported on MPS
     """
-    operation_lower = operation.lower()
-
-    # Check against known supported operations
-    if operation_lower in SUPPORTED_OPS:
-        return True
-
-    # Check against known unsupported operations
-    if operation_lower in UNSUPPORTED_OPS:
+    if not torch.backends.mps.is_available():
         return False
 
-    # Unknown operation - assume unsupported for safety
-    return False
+    # Common operations that are well-supported on MPS
+    supported_ops = {
+        "matmul",
+        "add",
+        "mul",
+        "div",
+        "sub",
+        "relu",
+        "gelu",
+        "softmax",
+        "layer_norm",
+        "linear",
+        "conv2d",
+        "embedding",
+        "attention",
+    }
+
+    return operation.lower() in supported_ops
 
 
 class MPSTrainingContext:
@@ -147,38 +123,40 @@ class MPSTrainingContext:
     Context manager for MPS training.
 
     Handles:
-    - Device placement
-    - Memory cleanup between batches
-    - Automatic CPU fallback for unsupported ops
-
-    Example:
-        with MPSTrainingContext() as ctx:
-            model = model.to(ctx.device)
-            output = model(input)
+    - Device selection
+    - Memory cleanup on exit
+    - Exception handling
     """
 
-    def __init__(self, config: MPSConfig = None):
+    def __init__(self, config: Optional[MPSConfig] = None):
         """
-        Initialize training context.
+        Initialize the training context.
 
         Args:
-            config: Optional MPSConfig. Uses defaults if not provided.
+            config: MPS configuration (uses defaults if None)
         """
         self.config = config or MPSConfig()
-        self.device = get_mps_device() if self.config.device == "mps" else torch.device("cpu")
+        self._device: Optional[torch.device] = None
+
+    @property
+    def device(self) -> torch.device:
+        """Get the current device."""
+        if self._device is None:
+            if self.config.device == "mps":
+                self._device = get_mps_device()
+            else:
+                self._device = torch.device(self.config.device)
+        return self._device
 
     def __enter__(self) -> "MPSTrainingContext":
-        """Enter context and set up device."""
-        logger.debug(f"Entering MPS training context with device: {self.device}")
+        """Enter the training context."""
+        logger.info(f"Entering MPS training context with device: {self.device}")
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        """Exit context and clean up."""
-        # Clear cache regardless of exception
-        try:
-            mps_empty_cache()
-        except Exception as e:
-            logger.warning(f"Error during cache cleanup: {e}")
+        """Exit the training context and clean up."""
+        mps_empty_cache()
+        logger.info("Exited MPS training context, cleared cache")
 
         # Don't suppress exceptions
-        logger.debug("Exiting MPS training context")
+        return None
