@@ -45,7 +45,7 @@ class Rank1DPOConfig:
 
     # MPS-specific
     use_mps: bool = True
-    fp16: bool = True
+    fp16: bool = False  # MPS doesn't support fp16 training flag
     bf16: bool = False
 
     # Reference model handling
