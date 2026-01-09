@@ -190,7 +190,7 @@ class Rank1DPOTrainer:
                 ref_model=self.ref_model,
                 args=dpo_config,
                 train_dataset=train_dataset,
-                tokenizer=self.tokenizer,
+                processing_class=self.tokenizer,
             )
 
             # Train
