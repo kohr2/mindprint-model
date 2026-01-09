@@ -615,19 +615,27 @@ class DPOPipeline:
 
         grouped: Dict[str, Dict] = {}
 
-        # Group SFT data
+        # Group SFT data by 'source' field
         for item in sft_data:
-            topic_id = item.get("topic_id", "unknown")
+            topic_id = item.get("source", item.get("topic_id", "unknown"))
             if topic_id not in grouped:
-                grouped[topic_id] = {"sft_data": [], "preference_pairs": []}
+                grouped[topic_id] = {"sft_data": [], "preference_pairs": [], "topic_id": topic_id}
             grouped[topic_id]["sft_data"].append(item)
 
-        # Group preference data
-        for item in preference_data:
-            topic_id = item.get("topic_id", "unknown")
-            if topic_id not in grouped:
-                grouped[topic_id] = {"sft_data": [], "preference_pairs": []}
-            grouped[topic_id]["preference_pairs"].append(item)
+        # Group preference data - match by instruction/prompt to SFT data
+        # For now, add all preference pairs to their corresponding topics based on prompts
+        for pref_item in preference_data:
+            prompt = pref_item.get("prompt", "")
+            # Find matching SFT item by instruction
+            matched = False
+            for topic_id, topic_data in grouped.items():
+                for sft_item in topic_data["sft_data"]:
+                    if sft_item.get("instruction") == prompt:
+                        topic_data["preference_pairs"].append(pref_item)
+                        matched = True
+                        break
+                if matched:
+                    break
 
         return grouped
 
