@@ -379,22 +379,12 @@ class DPOPipeline:
             progress.status = TopicStatus.SFT_COMPLETE
             progress.sft_loss = sft_result.final_loss
 
-            # Update model with SFT adapter
-            sft_model = sft_trainer.get_model()
+            # Keep SFT adapter for DPO (no merge/unload to avoid corruption)
+            # DPO will continue training the same adapter
+            self.model = sft_trainer.get_model()
+            logger.info("Keeping SFT adapter for DPO training (no merge)")
 
-            # Unload SFT adapter to prevent stacking with DPO adapter
-            logger.info("Unloading SFT adapter before DPO training")
-            if hasattr(sft_model, 'merge_and_unload'):
-                self.model = sft_model.merge_and_unload()
-                logger.info("SFT adapter merged and unloaded successfully")
-            elif hasattr(sft_model, 'peft_config'):
-                logger.warning("Model has PEFT adapter but no merge_and_unload method")
-                self.model = sft_model
-            else:
-                # Not a PEFT model, use as-is
-                self.model = sft_model
-
-            # Clear MPS cache after merging
+            # Clear MPS cache
             mps_empty_cache()
 
             # 2. Evaluate
@@ -429,18 +419,7 @@ class DPOPipeline:
                 if dpo_result.success:
                     progress.status = TopicStatus.DPO_COMPLETE
                     progress.dpo_loss = dpo_result.final_loss
-
-                    # Get DPO model and unload adapter for next topic
-                    dpo_model = dpo_trainer.get_model()
-                    logger.info("Unloading DPO adapter after training")
-                    if hasattr(dpo_model, 'merge_and_unload'):
-                        self.model = dpo_model.merge_and_unload()
-                        logger.info("DPO adapter merged and unloaded successfully")
-                    else:
-                        self.model = dpo_model
-
-                    # Clear MPS cache after merging
-                    mps_empty_cache()
+                    self.model = dpo_trainer.get_model()
 
                 # Re-evaluate after DPO
                 eval_result = self._evaluate_topic(topic_data)
@@ -461,6 +440,14 @@ class DPOPipeline:
                     progress.status = TopicStatus.FAILED
 
             progress.training_time_seconds = time.time() - start_time
+
+            # Merge adapter into base model for next topic (incremental learning)
+            from peft import PeftModel
+            if isinstance(self.model, PeftModel):
+                logger.info("Merging adapter into base model for next topic")
+                self.model = self.model.merge_and_unload()
+                logger.info("Adapter merged successfully")
+                mps_empty_cache()
 
             logger.info(
                 f"Topic {topic_id} complete: status={progress.status.value}, "

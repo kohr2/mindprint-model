@@ -127,29 +127,25 @@ class Rank1DPOTrainer:
         Returns:
             Tuple of (policy_model, reference_model)
         """
-        # Defensive check for existing active adapters
-        # Check if model is a PeftModel instance (has active adapters)
+        # Check if model already has adapters (reuse SFT adapter for DPO)
         from peft import PeftModel
         if isinstance(self.base_model, PeftModel):
-            logger.error(
-                "Base model is a PeftModel with active adapters. "
-                "This will cause adapter stacking. "
-                "Call merge_and_unload() on the model before passing to DPO trainer."
+            logger.info(
+                "Model already has SFT adapter. "
+                "Continuing to train the same adapter with DPO objective."
             )
-            raise ValueError(
-                "Cannot apply DPO adapter: base model is a PeftModel. "
-                "Unload/merge existing adapters first."
+            # Use existing adapter instead of creating new one
+            self.peft_model = self.base_model
+        else:
+            # Create new adapter if none exists
+            lora_config = LoraConfig(
+                r=self.config.lora_r,
+                lora_alpha=self.config.lora_alpha,
+                target_modules=self.config.target_modules,
+                lora_dropout=self.config.lora_dropout,
+                task_type=TaskType.CAUSAL_LM,
             )
-
-        lora_config = LoraConfig(
-            r=self.config.lora_r,
-            lora_alpha=self.config.lora_alpha,
-            target_modules=self.config.target_modules,
-            lora_dropout=self.config.lora_dropout,
-            task_type=TaskType.CAUSAL_LM,
-        )
-
-        self.peft_model = get_peft_model(self.base_model, lora_config)
+            self.peft_model = get_peft_model(self.base_model, lora_config)
 
         logger.info(
             f"Prepared Rank-1 DPO model with r={self.config.lora_r}, "
