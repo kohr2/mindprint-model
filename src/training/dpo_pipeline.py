@@ -429,7 +429,18 @@ class DPOPipeline:
                 if dpo_result.success:
                     progress.status = TopicStatus.DPO_COMPLETE
                     progress.dpo_loss = dpo_result.final_loss
-                    self.model = dpo_trainer.get_model()
+
+                    # Get DPO model and unload adapter for next topic
+                    dpo_model = dpo_trainer.get_model()
+                    logger.info("Unloading DPO adapter after training")
+                    if hasattr(dpo_model, 'merge_and_unload'):
+                        self.model = dpo_model.merge_and_unload()
+                        logger.info("DPO adapter merged and unloaded successfully")
+                    else:
+                        self.model = dpo_model
+
+                    # Clear MPS cache after merging
+                    mps_empty_cache()
 
                 # Re-evaluate after DPO
                 eval_result = self._evaluate_topic(topic_data)
