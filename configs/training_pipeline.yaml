@@ -4,7 +4,7 @@
 
 # Backend configuration (optional - defaults to legacy mode if not specified)
 backend:
-  type: pytorch  # "pytorch" or "mlx" (set to null for legacy mode)
+  type: mlx  # "pytorch" or "mlx" (set to null for legacy mode)
   device: auto  # "auto", "mps", "cuda", "cpu", "gpu"
   dtype: float16  # "float16", "float32", "bfloat16"
 
