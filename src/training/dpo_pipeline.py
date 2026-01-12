@@ -27,6 +27,21 @@ from .dpo_trainer import Rank1DPOTrainer, Rank1DPOConfig
 from .mps_utils import mps_empty_cache
 from src.evaluation.voice_evaluator import QuizEvaluator
 
+# Backend interface imports (optional for backward compatibility)
+try:
+    from src.backends import (
+        BackendProtocol,
+        ModelInterface,
+        TrainerInterface,
+        create_backend,
+    )
+    BACKENDS_AVAILABLE = True
+except ImportError:
+    BACKENDS_AVAILABLE = False
+    BackendProtocol = None
+    ModelInterface = None
+    TrainerInterface = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -45,6 +60,11 @@ class TopicStatus(Enum):
 @dataclass
 class PipelineConfig:
     """Configuration for the DPO training pipeline."""
+
+    # Backend settings (optional - defaults to direct PyTorch usage)
+    backend_type: Optional[str] = None  # "pytorch", "mlx", or None for legacy mode
+    backend_device: str = "auto"  # "auto", "mps", "cuda", "cpu", "gpu"
+    backend_dtype: str = "float16"  # "float16", "float32", "bfloat16"
 
     # SFT settings
     sft_epochs_per_topic: int = 3
@@ -195,21 +215,54 @@ class DPOPipeline:
         model: PreTrainedModel,
         tokenizer: PreTrainedTokenizer,
         config: PipelineConfig,
+        backend: Optional[BackendProtocol] = None,
     ):
         """
         Initialize the pipeline.
 
         Args:
-            model: Base model to fine-tune
-            tokenizer: Tokenizer for the model
+            model: Base model to fine-tune (legacy mode) or None if using backend
+            tokenizer: Tokenizer for the model (legacy mode) or None if using backend
             config: Pipeline configuration
+            backend: Optional backend instance (if None, uses legacy mode)
         """
-        self.model = model
-        self.tokenizer = tokenizer
         self.config = config
+        self.backend = backend
+        self.use_backend = backend is not None
+
+        if self.use_backend:
+            # Backend mode: wrap model in backend interface
+            if not BACKENDS_AVAILABLE:
+                raise RuntimeError(
+                    "Backend mode requested but backends not available. "
+                    "Install backend dependencies."
+                )
+
+            # Create backend if needed
+            if self.backend is None and self.config.backend_type:
+                logger.info(f"Creating {self.config.backend_type} backend")
+                self.backend = create_backend(
+                    self.config.backend_type,
+                    device=self.config.backend_device,
+                    dtype=self.config.backend_dtype,
+                )
+                self.use_backend = True
+
+            # Wrap model in backend interface
+            if self.backend and model:
+                from src.backends.pytorch import PyTorchModel
+                self.model = PyTorchModel(model, tokenizer)
+            else:
+                self.model = None  # Will be loaded via backend
+
+            self.tokenizer = tokenizer
+        else:
+            # Legacy mode: use direct PyTorch models
+            self.model = model
+            self.tokenizer = tokenizer
 
         # Ensure tokenizer has pad token
-        if self.tokenizer.pad_token is None:
+        if self.tokenizer and self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
         # Create output directories
@@ -219,6 +272,10 @@ class DPOPipeline:
         # Progress tracking
         self.units: List[UnitProgress] = []
         self.start_time: float = 0.0
+
+        logger.info(
+            f"DPOPipeline initialized in {'backend' if self.use_backend else 'legacy'} mode"
+        )
 
     def train_curriculum(
         self,
@@ -359,33 +416,63 @@ class DPOPipeline:
 
         try:
             # 1. SFT Training
-            sft_config = SFTConfig(
-                learning_rate=self.config.sft_learning_rate,
-                num_epochs=self.config.sft_epochs_per_topic,
-                per_device_batch_size=self.config.sft_batch_size,
-            )
-            sft_trainer = SFTTrainer(self.model, self.tokenizer, sft_config)
+            if self.use_backend:
+                # Backend mode: use backend interface
+                sft_config_dict = {
+                    "learning_rate": self.config.sft_learning_rate,
+                    "num_epochs": self.config.sft_epochs_per_topic,
+                    "per_device_batch_size": self.config.sft_batch_size,
+                    "output_dir": self.config.output_dir,
+                }
+                sft_trainer = self.backend.create_sft_trainer(self.model, sft_config_dict)
 
-            sft_result = sft_trainer.train_on_topic(
-                topic_data.get("sft_data", []),
-                topic_id,
-            )
+                sft_result = sft_trainer.train_on_topic(
+                    topic_data.get("sft_data", []),
+                    topic_id,
+                )
 
-            if not sft_result.success:
-                progress.status = TopicStatus.FAILED
-                progress.training_time_seconds = time.time() - start_time
-                return progress
+                if not sft_result.success:
+                    progress.status = TopicStatus.FAILED
+                    progress.training_time_seconds = time.time() - start_time
+                    return progress
 
-            progress.status = TopicStatus.SFT_COMPLETE
-            progress.sft_loss = sft_result.final_loss
+                progress.status = TopicStatus.SFT_COMPLETE
+                progress.sft_loss = sft_result.final_loss
+                self.model = sft_trainer.get_model()
+                logger.info("SFT complete (backend mode)")
 
-            # Keep SFT adapter for DPO (no merge/unload to avoid corruption)
-            # DPO will continue training the same adapter
-            self.model = sft_trainer.get_model()
-            logger.info("Keeping SFT adapter for DPO training (no merge)")
+            else:
+                # Legacy mode: use direct PyTorch trainers
+                sft_config = SFTConfig(
+                    learning_rate=self.config.sft_learning_rate,
+                    num_epochs=self.config.sft_epochs_per_topic,
+                    per_device_batch_size=self.config.sft_batch_size,
+                )
+                sft_trainer = SFTTrainer(self.model, self.tokenizer, sft_config)
+
+                sft_result = sft_trainer.train_on_topic(
+                    topic_data.get("sft_data", []),
+                    topic_id,
+                )
+
+                if not sft_result.success:
+                    progress.status = TopicStatus.FAILED
+                    progress.training_time_seconds = time.time() - start_time
+                    return progress
+
+                progress.status = TopicStatus.SFT_COMPLETE
+                progress.sft_loss = sft_result.final_loss
+
+                # Keep SFT adapter for DPO (no merge/unload to avoid corruption)
+                # DPO will continue training the same adapter
+                self.model = sft_trainer.get_model()
+                logger.info("Keeping SFT adapter for DPO training (no merge)")
 
             # Clear MPS cache
-            mps_empty_cache()
+            if self.use_backend:
+                self.backend.get_device_manager().empty_cache()
+            else:
+                mps_empty_cache()
 
             # 2. Evaluate
             eval_result = self._evaluate_topic(topic_data)
@@ -401,25 +488,49 @@ class DPOPipeline:
                 )
 
                 # Run DPO
-                dpo_config = Rank1DPOConfig(
-                    learning_rate=self.config.dpo_learning_rate,
-                    max_steps=self.config.dpo_steps_per_topic,
-                    per_device_batch_size=self.config.dpo_batch_size,
-                    beta=self.config.dpo_beta,
-                )
-                dpo_trainer = Rank1DPOTrainer(
-                    self.model, self.tokenizer, dpo_config
-                )
+                if self.use_backend:
+                    # Backend mode
+                    dpo_config_dict = {
+                        "learning_rate": self.config.dpo_learning_rate,
+                        "max_steps": self.config.dpo_steps_per_topic,
+                        "per_device_batch_size": self.config.dpo_batch_size,
+                        "beta": self.config.dpo_beta,
+                        "output_dir": self.config.output_dir,
+                    }
+                    dpo_trainer = self.backend.create_dpo_trainer(
+                        self.model, dpo_config_dict
+                    )
 
-                dpo_result = dpo_trainer.train_on_topic(
-                    topic_data.get("preference_pairs", []),
-                    topic_id,
-                )
+                    dpo_result = dpo_trainer.train_on_topic(
+                        topic_data.get("preference_pairs", []),
+                        topic_id,
+                    )
 
-                if dpo_result.success:
-                    progress.status = TopicStatus.DPO_COMPLETE
-                    progress.dpo_loss = dpo_result.final_loss
-                    self.model = dpo_trainer.get_model()
+                    if dpo_result.success:
+                        progress.status = TopicStatus.DPO_COMPLETE
+                        progress.dpo_loss = dpo_result.final_loss
+                        self.model = dpo_trainer.get_model()
+                else:
+                    # Legacy mode
+                    dpo_config = Rank1DPOConfig(
+                        learning_rate=self.config.dpo_learning_rate,
+                        max_steps=self.config.dpo_steps_per_topic,
+                        per_device_batch_size=self.config.dpo_batch_size,
+                        beta=self.config.dpo_beta,
+                    )
+                    dpo_trainer = Rank1DPOTrainer(
+                        self.model, self.tokenizer, dpo_config
+                    )
+
+                    dpo_result = dpo_trainer.train_on_topic(
+                        topic_data.get("preference_pairs", []),
+                        topic_id,
+                    )
+
+                    if dpo_result.success:
+                        progress.status = TopicStatus.DPO_COMPLETE
+                        progress.dpo_loss = dpo_result.final_loss
+                        self.model = dpo_trainer.get_model()
 
                 # Re-evaluate after DPO
                 eval_result = self._evaluate_topic(topic_data)
@@ -441,12 +552,14 @@ class DPOPipeline:
 
             progress.training_time_seconds = time.time() - start_time
 
-            # Merge adapter into base model for next topic (incremental learning)
+            # TEMPORARY: Skip merging between topics to avoid corruption on MPS
+            # Just keep the adapted model with LoRA for next topic
+            # This means we'll have incremental adapters stacking, but at least
+            # we can test if SFT-only training works
             from peft import PeftModel
             if isinstance(self.model, PeftModel):
-                logger.info("Merging adapter into base model for next topic")
-                self.model = self.model.merge_and_unload()
-                logger.info("Adapter merged successfully")
+                logger.info("Keeping adapted model for next topic (no merge/unload to avoid MPS corruption)")
+                # Model stays as-is with adapter attached
                 mps_empty_cache()
 
             logger.info(
