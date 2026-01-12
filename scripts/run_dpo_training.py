@@ -38,6 +38,15 @@ from src.training import (
 # Try to import backends (optional)
 try:
     from src.backends import create_backend, BackendProtocol
+    # Import backend implementations to trigger registration
+    try:
+        import src.backends.pytorch  # noqa
+    except ImportError:
+        pass
+    try:
+        import src.backends.mlx  # noqa
+    except ImportError:
+        pass
     BACKENDS_AVAILABLE = True
 except ImportError:
     BACKENDS_AVAILABLE = False
