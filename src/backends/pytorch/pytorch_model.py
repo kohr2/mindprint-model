@@ -305,3 +305,21 @@ class PyTorchModel(ModelInterface):
         """
         self._model = self._model.to(device)
         return self
+
+    def get_tokenizer(self) -> Any:
+        """
+        Get the tokenizer for this model.
+
+        Returns:
+            The tokenizer instance
+        """
+        return self._tokenizer
+
+    def named_parameters(self) -> Any:
+        """
+        Get named parameters iterator.
+
+        Returns:
+            Iterator over (name, parameter) pairs
+        """
+        return self._model.named_parameters()

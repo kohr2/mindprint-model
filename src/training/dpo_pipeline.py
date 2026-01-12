@@ -248,14 +248,21 @@ class DPOPipeline:
                 )
                 self.use_backend = True
 
-            # Wrap model in backend interface
+            # Check if model is already wrapped as ModelInterface
             if self.backend and model:
-                from src.backends.pytorch import PyTorchModel
-                self.model = PyTorchModel(model, tokenizer)
+                # Check if already a ModelInterface
+                if hasattr(model, 'get_tokenizer') and hasattr(model, 'forward'):
+                    # Already wrapped
+                    self.model = model
+                    self.tokenizer = model.get_tokenizer() if hasattr(model, 'get_tokenizer') else tokenizer
+                else:
+                    # Need to wrap
+                    from src.backends.pytorch import PyTorchModel
+                    self.model = PyTorchModel(model, tokenizer)
+                    self.tokenizer = tokenizer
             else:
                 self.model = None  # Will be loaded via backend
-
-            self.tokenizer = tokenizer
+                self.tokenizer = tokenizer
         else:
             # Legacy mode: use direct PyTorch models
             self.model = model

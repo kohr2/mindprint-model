@@ -282,7 +282,7 @@ def main():
 
         # Create pipeline with backend
         pipeline = DPOPipeline(
-            model=model_interface.get_underlying_model(),  # Pass underlying model
+            model=model_interface,  # Pass ModelInterface directly
             tokenizer=model_interface.tokenizer,
             config=config,
             backend=backend,
