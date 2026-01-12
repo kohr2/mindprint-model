@@ -3,10 +3,19 @@
 DPO Training Pipeline CLI.
 
 Runs the full SFT + DPO training pipeline for Bob Loukas mindprint.
-Optimized for Mac Studio M2 Ultra (64GB unified memory, MPS).
+Supports both PyTorch (CUDA/CPU) and MLX (Apple Silicon) backends.
 
 Usage:
-    python scripts/run_dpo_training.py --config configs/training_pipeline.yaml
+    # With MLX backend (Mac Studio)
+    python scripts/run_dpo_training.py --config configs/training_pipeline.yaml --backend mlx
+
+    # With PyTorch backend (Cloud GPU)
+    python scripts/run_dpo_training.py --config configs/training_pipeline.yaml --backend pytorch
+
+    # Legacy mode (direct PyTorch)
+    python scripts/run_dpo_training.py --config configs/training_pipeline.yaml --backend null
+
+    # Resume from checkpoint
     python scripts/run_dpo_training.py --resume ./checkpoints/latest.json
 """
 
@@ -14,10 +23,9 @@ import argparse
 import logging
 import sys
 from pathlib import Path
+from typing import Optional
 
 import yaml
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -26,7 +34,23 @@ from src.training import (
     PipelineConfig,
     DPOPipeline,
 )
-from src.training.mps_utils import get_mps_device, mps_empty_cache
+
+# Try to import backends (optional)
+try:
+    from src.backends import create_backend, BackendProtocol
+    BACKENDS_AVAILABLE = True
+except ImportError:
+    BACKENDS_AVAILABLE = False
+    BackendProtocol = None
+
+# Try to import PyTorch (for legacy mode)
+try:
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from src.training.mps_utils import get_mps_device, mps_empty_cache
+    PYTORCH_AVAILABLE = True
+except ImportError:
+    PYTORCH_AVAILABLE = False
 
 logging.basicConfig(
     level=logging.INFO,
@@ -40,8 +64,18 @@ def load_config(config_path: str) -> PipelineConfig:
     with open(config_path) as f:
         config_dict = yaml.safe_load(f)
 
+    # Extract backend configuration
+    backend_config = config_dict.get("backend", {})
+    backend_type = backend_config.get("type")
+    backend_device = backend_config.get("device", "auto")
+    backend_dtype = backend_config.get("dtype", "float16")
+
     # Map YAML structure to PipelineConfig
     return PipelineConfig(
+        # Backend settings (for new backend system)
+        backend_type=backend_type,
+        backend_device=backend_device,
+        backend_dtype=backend_dtype,
         # SFT settings
         sft_epochs_per_topic=config_dict.get("sft", {}).get("epochs_per_topic", 3),
         sft_learning_rate=config_dict.get("sft", {}).get("learning_rate", 3e-4),
@@ -131,8 +165,13 @@ def main():
     parser.add_argument(
         "--model",
         type=str,
-        default="google/gemma-3-12b",
+        default="Qwen/Qwen2.5-7B-Instruct",
         help="Model name or path",
+    )
+    parser.add_argument(
+        "--backend",
+        type=str,
+        help="Override backend from config (pytorch, mlx, or null for legacy)",
     )
     parser.add_argument(
         "--resume",
@@ -157,10 +196,6 @@ def main():
 
     args = parser.parse_args()
 
-    # Check MPS availability
-    device = get_mps_device()
-    logger.info(f"Using device: {device}")
-
     # Load configuration
     if Path(args.config).exists():
         config = load_config(args.config)
@@ -169,17 +204,32 @@ def main():
         config = PipelineConfig()
         logger.warning(f"Config file not found: {args.config}, using defaults")
 
+    # Override backend if specified
+    if args.backend:
+        if args.backend.lower() == "null":
+            config.backend_type = None
+        else:
+            config.backend_type = args.backend.lower()
+        logger.info(f"Backend overridden to: {config.backend_type}")
+
     # Override paths if specified
     if args.data_dir:
         config.data_dir = args.data_dir
     if args.output_dir:
         config.output_dir = args.output_dir
 
+    # Determine mode
+    use_backend = config.backend_type is not None and BACKENDS_AVAILABLE
+
     # Dry run - just print config
     if args.dry_run:
         logger.info("=== DRY RUN - Configuration ===")
         logger.info(f"Model: {args.model}")
-        logger.info(f"Device: {device}")
+        logger.info(f"Backend mode: {use_backend}")
+        if use_backend:
+            logger.info(f"Backend type: {config.backend_type}")
+            logger.info(f"Backend device: {config.backend_device}")
+            logger.info(f"Backend dtype: {config.backend_dtype}")
         logger.info(f"SFT epochs/topic: {config.sft_epochs_per_topic}")
         logger.info(f"DPO steps/topic: {config.dpo_steps_per_topic}")
         logger.info(f"Accuracy threshold: {config.accuracy_threshold}")
@@ -190,15 +240,65 @@ def main():
         logger.info(f"Checkpoint dir: {config.checkpoint_dir}")
         return 0
 
-    # Load model and tokenizer
-    model, tokenizer = load_model_and_tokenizer(
-        args.model,
-        device=device.type,
-        dtype="float16",
-    )
+    # Initialize pipeline based on mode
+    backend = None
+    model = None
+    tokenizer = None
 
-    # Create pipeline
-    pipeline = DPOPipeline(model, tokenizer, config)
+    if use_backend:
+        # Backend mode
+        logger.info(f"Using backend: {config.backend_type}")
+        logger.info(f"Backend device: {config.backend_device}")
+        logger.info(f"Backend dtype: {config.backend_dtype}")
+
+        # Create backend
+        backend = create_backend(
+            config.backend_type,
+            device=config.backend_device,
+            dtype=config.backend_dtype,
+        )
+        logger.info(f"Backend created: {backend.name}")
+
+        # Load model name from config
+        with open(args.config) as f:
+            config_dict = yaml.safe_load(f)
+            model_name = config_dict.get("model", {}).get("name", args.model)
+
+        logger.info(f"Loading model via backend: {model_name}")
+
+        # Load model via backend
+        model_interface = backend.load_model(model_name)
+        logger.info(f"Model loaded successfully")
+        logger.info(f"Model parameters: {model_interface.num_parameters:,}")
+
+        # Create pipeline with backend
+        pipeline = DPOPipeline(
+            model=model_interface.get_underlying_model(),  # Pass underlying model
+            tokenizer=model_interface.tokenizer,
+            config=config,
+            backend=backend,
+        )
+    else:
+        # Legacy mode (direct PyTorch)
+        if not PYTORCH_AVAILABLE:
+            logger.error("PyTorch not available for legacy mode")
+            return 1
+
+        logger.info("Using legacy mode (direct PyTorch)")
+
+        # Check MPS availability
+        device = get_mps_device()
+        logger.info(f"Using device: {device}")
+
+        # Load model and tokenizer
+        model, tokenizer = load_model_and_tokenizer(
+            args.model,
+            device=device.type,
+            dtype="float16",
+        )
+
+        # Create pipeline
+        pipeline = DPOPipeline(model, tokenizer, config)
 
     # Resume from checkpoint if specified
     if args.resume:
@@ -232,7 +332,14 @@ def main():
     })
 
     # Clear cache
-    mps_empty_cache()
+    if use_backend and backend is not None:
+        # Use backend device manager
+        backend.get_device_manager().empty_cache()
+        logger.info("Cleared backend device cache")
+    elif PYTORCH_AVAILABLE:
+        # Use MPS utils
+        mps_empty_cache()
+        logger.info("Cleared MPS cache")
 
     return 0 if result.success else 1
 
