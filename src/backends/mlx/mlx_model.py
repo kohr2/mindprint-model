@@ -332,3 +332,25 @@ class MLXModel(ModelInterface):
         # MLX models don't have train/eval modes like PyTorch
         # This is a no-op for compatibility
         pass
+
+    def get_tokenizer(self) -> Any:
+        """
+        Get the tokenizer for this model.
+
+        Returns:
+            The tokenizer instance
+        """
+        return self._tokenizer
+
+    def named_parameters(self) -> Any:
+        """
+        Get named parameters iterator.
+
+        Returns:
+            Iterator over (name, parameter) pairs
+        """
+        try:
+            return self._model.named_parameters()
+        except AttributeError:
+            # If model doesn't have named_parameters, return empty dict
+            return {}.items()
