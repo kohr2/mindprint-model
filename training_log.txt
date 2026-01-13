@@ -1,0 +1,22 @@
+2026-01-12 22:16:13,584 - src.backends.factory - INFO - Registered backend: pytorch -> PyTorchBackend
+2026-01-12 22:16:13,585 - src.backends.factory - INFO - Registered backend: mlx -> MLXBackend
+2026-01-12 22:16:13,587 - __main__ - INFO - Loaded config from: configs/training_pipeline.yaml
+2026-01-12 22:16:13,587 - __main__ - INFO - Using backend: mlx
+2026-01-12 22:16:13,587 - __main__ - INFO - Backend device: auto
+2026-01-12 22:16:13,587 - __main__ - INFO - Backend dtype: float16
+2026-01-12 22:16:13,587 - src.backends.factory - INFO - Creating mlx backend with config: BackendConfig(backend_type='mlx', device='auto', dtype='float16', seed=42, validate=True)
+2026-01-12 22:16:13,587 - src.backends.mlx.mlx_device_manager - INFO - MLX device manager initialized (device: gpu)
+2026-01-12 22:16:14,499 - src.backends.mlx.mlx_backend - INFO - Set MLX random seed to 42
+2026-01-12 22:16:14,499 - src.backends.mlx.mlx_backend - INFO - Initialized MLX backend (device=gpu, dtype=float16, seed=42)
+2026-01-12 22:16:14,499 - __main__ - INFO - Backend created: mlx
+2026-01-12 22:16:14,501 - __main__ - INFO - Loading model via backend: Qwen/Qwen2.5-7B-Instruct
+2026-01-12 22:16:14,501 - src.backends.mlx.mlx_backend - INFO - Loading model from Qwen/Qwen2.5-7B-Instruct
+2026-01-12 22:16:14,515 - src.backends.mlx.mlx_backend - INFO - Loading tokenizer from Qwen/Qwen2.5-7B-Instruct
+2026-01-12 22:16:14,706 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/Qwen/Qwen2.5-7B-Instruct/resolve/main/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-01-12 22:16:14,732 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/Qwen/Qwen2.5-7B-Instruct/a09a35458c702b33eeacc393d103063234e8bc28/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-01-12 22:16:14,855 - httpx - INFO - HTTP Request: GET https://huggingface.co/api/models/Qwen/Qwen2.5-7B-Instruct/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-01-12 22:16:14,979 - httpx - INFO - HTTP Request: GET https://huggingface.co/api/models/Qwen/Qwen2.5-7B-Instruct/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-01-12 22:16:15,434 - httpx - INFO - HTTP Request: GET https://huggingface.co/api/models/Qwen/Qwen2.5-7B-Instruct "HTTP/1.1 200 OK"
+2026-01-12 22:16:15,435 - src.backends.mlx.mlx_backend - INFO - Loading MLX model
+2026-01-12 22:16:15,555 - httpx - INFO - HTTP Request: GET https://huggingface.co/api/models/Qwen/Qwen2.5-7B-Instruct/revision/main "HTTP/1.1 200 OK"
+Fetching 11 files:   0%|          | 0/11 [00:00<?, ?it/s]Fetching 11 files: 100%|██████████| 11/11 [00:00<00:00, 72886.80it/s]

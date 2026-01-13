@@ -324,25 +324,57 @@ class QuizEvaluator:
         """Generate model answers for questions."""
         answers = []
 
+        # Check if model is a ModelInterface (backend mode)
+        is_backend_mode = hasattr(self.model, 'get_underlying_model')
+
         for question in questions:
             prompt = self._format_prompt(question)
-            inputs = self.tokenizer(
-                prompt, return_tensors="pt", truncation=True, max_length=2048
-            ).to(self.model.device)
 
-            outputs = self.model.generate(
-                **inputs,
-                max_new_tokens=512,
-                temperature=0.1,
-                do_sample=False,
-                pad_token_id=self.tokenizer.eos_token_id,
-            )
+            if is_backend_mode:
+                # Backend mode - use ModelInterface generate
+                # Tokenize to get input IDs
+                inputs = self.tokenizer(
+                    prompt, return_tensors="pt", truncation=True, max_length=2048
+                )
+                input_ids = inputs["input_ids"]
 
-            # Decode only the generated part
-            answer = self.tokenizer.decode(
-                outputs[0][inputs["input_ids"].shape[1] :],
-                skip_special_tokens=True,
-            )
+                # Call ModelInterface generate (returns text for MLX, tokens for PyTorch)
+                output = self.model.generate(
+                    input_ids=input_ids,
+                    max_new_tokens=512,
+                    temperature=0.1,
+                )
+
+                # Check if output is string (MLX) or tensor (PyTorch)
+                if isinstance(output, str):
+                    # MLX returns string directly
+                    answer = output
+                else:
+                    # PyTorch returns tokens
+                    answer = self.tokenizer.decode(
+                        output[0][input_ids.shape[1]:],
+                        skip_special_tokens=True,
+                    )
+            else:
+                # Legacy PyTorch mode
+                inputs = self.tokenizer(
+                    prompt, return_tensors="pt", truncation=True, max_length=2048
+                ).to(self.model.device)
+
+                outputs = self.model.generate(
+                    **inputs,
+                    max_new_tokens=512,
+                    temperature=0.1,
+                    do_sample=False,
+                    pad_token_id=self.tokenizer.eos_token_id,
+                )
+
+                # Decode only the generated part
+                answer = self.tokenizer.decode(
+                    outputs[0][inputs["input_ids"].shape[1] :],
+                    skip_special_tokens=True,
+                )
+
             answers.append(answer.strip())
 
         return answers
