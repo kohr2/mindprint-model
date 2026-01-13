@@ -79,14 +79,14 @@ class MLXModel(ModelInterface):
                 prompt_text = self._tokenizer.decode(input_ids)
 
             # MLX generation - returns generated text as string
+            # mlx_lm.generate uses different parameter names than transformers
+            # For now, use basic parameters that are known to work
             generated_text = mlx_generate(
                 self._model,
                 self._tokenizer,
                 prompt=prompt_text,
                 max_tokens=max_new_tokens,
-                temp=temperature,
-                top_p=top_p,
-                **kwargs
+                verbose=False  # Suppress generation output
             )
 
             return generated_text
