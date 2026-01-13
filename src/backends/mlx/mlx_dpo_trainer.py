@@ -371,3 +371,22 @@ class MLXDPOTrainer(DPOTrainerInterface):
             MLXModel reference model, or None if not provided
         """
         return self._mlx_ref_model
+
+    def get_config(self) -> Dict[str, Any]:
+        """
+        Get training configuration.
+
+        Returns:
+            Training configuration dictionary
+        """
+        return self._config
+
+    def get_training_stats(self) -> Dict[str, Any]:
+        """
+        Get training statistics.
+
+        Returns:
+            Dictionary with training stats (losses, rewards, etc.)
+        """
+        # Return empty dict for now - could be populated during training
+        return {}
