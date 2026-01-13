@@ -67,25 +67,29 @@ class MLXModel(ModelInterface):
             import mlx.core as mx
             from mlx_lm import generate as mlx_generate
 
-            # MLX generate expects prompt as string or tokens
-            # Convert input_ids to list if needed
+            # MLX generate expects prompt as string
+            # If input_ids is a tensor, decode it first
             if hasattr(input_ids, 'tolist'):
-                prompt_tokens = input_ids.tolist()
+                # It's a tensor - decode to string
+                prompt_text = self._tokenizer.decode(input_ids[0].tolist())
+            elif isinstance(input_ids, str):
+                prompt_text = input_ids
             else:
-                prompt_tokens = input_ids
+                # Assume it's a list of tokens
+                prompt_text = self._tokenizer.decode(input_ids)
 
-            # MLX generation
-            output = mlx_generate(
+            # MLX generation - returns generated text as string
+            generated_text = mlx_generate(
                 self._model,
                 self._tokenizer,
-                prompt=prompt_tokens,
+                prompt=prompt_text,
                 max_tokens=max_new_tokens,
                 temp=temperature,
                 top_p=top_p,
                 **kwargs
             )
 
-            return output
+            return generated_text
 
         except ImportError:
             raise RuntimeError(
