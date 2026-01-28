@@ -46,6 +46,7 @@ class MLXAdapterManager(AdapterManager):
             raise TypeError(f"Expected MLXModel, got {type(model)}")
 
         try:
+            from mlx_lm.tuner.utils import linear_to_lora_layers
             from mlx_lm.tuner.lora import LoRALinear
             import mlx.nn as nn
             
@@ -64,176 +65,51 @@ class MLXAdapterManager(AdapterManager):
                 f"target_modules={mlx_config['target_modules']}"
             )
 
-            # Convert linear layers to LoRA layers
-            # MLX models use a dictionary-like structure accessed via items()
-            def convert_to_lora(module, parent_name="", depth=0):
-                """Recursively convert linear layers to LoRA layers."""
-                if depth > 20:  # Safety limit to prevent infinite recursion
-                    return 0
-                
-                converted_count = 0
-                
-                # MLX modules use items() method for dict-like access
-                items_to_check = []
-                
-                # Method 1: Try items() if available (MLX dict-like interface)
-                if hasattr(module, 'items'):
-                    try:
-                        items_to_check = list(module.items())
-                    except Exception as e:
-                        logger.debug(f"Could not get items from {parent_name}: {e}")
-                
-                # Method 2: Try __dict__ for standard Python objects
-                if not items_to_check and hasattr(module, '__dict__'):
-                    items_to_check = [(k, v) for k, v in module.__dict__.items() if not k.startswith('_')]
-                
-                # Process items
-                for name, child in items_to_check:
-                    if name.startswith('_'):
-                        continue
-                    
-                    full_name = f"{parent_name}.{name}" if parent_name else name
-                    
-                    # Check if this is a Linear layer that should be converted
-                    if isinstance(child, nn.Linear):
-                        # Check if this module should be converted
-                        should_convert = any(
-                            target in name for target in mlx_config['target_modules']
-                        )
-                        
-                        if should_convert:
-                            logger.info(f"Converting {full_name} to LoRA")
-                            try:
-                                # Convert to LoRA layer using from_base
-                                # from_base takes the base Linear layer and LoRA config
-                                lora_layer = LoRALinear.from_base(
-                                    child,
-                                    r=mlx_config['rank'],
-                                    scale=mlx_config['scale'],
-                                    dropout=mlx_config.get('dropout', 0.0),
-                                )
-                                # Set the LoRA layer back using items() interface
-                                if hasattr(module, '__setitem__'):
-                                    # Dictionary-like interface (MLX modules)
-                                    module[name] = lora_layer
-                                elif hasattr(module, '__setattr__'):
-                                    # Standard attribute interface
-                                    setattr(module, name, lora_layer)
-                                else:
-                                    # Try direct assignment
-                                    module[name] = lora_layer
-                                converted_count += 1
-                            except Exception as e:
-                                logger.warning(f"Failed to convert {full_name}: {e}")
-                                import traceback
-                                logger.debug(traceback.format_exc())
-                    else:
-                        # Recursively process nested modules
-                        # Skip non-module types (like lists, tuples, primitives)
-                        if isinstance(child, (list, tuple, str, int, float, bool)):
-                            continue
-                        # Check if it's a module-like object worth recursing into
-                        if isinstance(child, nn.Module) or hasattr(child, 'items') or (hasattr(child, '__dict__') and not isinstance(child, type)):
-                            converted_count += convert_to_lora(child, full_name, depth + 1)
-                
-                return converted_count
-
-            # Convert model layers
-            # MLX models typically have: model.model.layers[i].self_attn.q_proj, etc.
-            converted_count = 0
-            if hasattr(mlx_model, 'model'):
-                # Qwen/Llama-style models have a 'model' attribute containing layers
-                # Traverse: model -> model.model -> model.model.layers -> layer.self_attn -> q_proj
-                base_model = mlx_model.model
-                if hasattr(base_model, 'layers'):
-                    # Process each layer in the transformer
-                    for i, layer in enumerate(base_model.layers):
-                        converted_count += convert_to_lora(layer, f"layers.{i}", depth=0)
-                else:
-                    # Fallback: try converting the whole model
-                    converted_count = convert_to_lora(base_model)
-            elif hasattr(mlx_model, 'layers'):
-                # Direct layers attribute
-                for i, layer in enumerate(mlx_model.layers):
-                    converted_count += convert_to_lora(layer, f"layers.{i}", depth=0)
-            else:
-                # Try direct conversion
-                converted_count = convert_to_lora(mlx_model)
+            # Use official utility to apply LoRA
+            lora_config = {
+                'rank': mlx_config['rank'],
+                'alpha': mlx_config.get('alpha', mlx_config['rank'] * 2),
+                'dropout': mlx_config.get('dropout', 0.0),
+                'scale': mlx_config['scale'],
+            }
+            
+            # Apply LoRA to all layers (-1 means all layers)
+            converted_count = linear_to_lora_layers(mlx_model, num_layers=-1, config=lora_config)
             
             if converted_count == 0:
                 logger.warning("No linear layers were converted to LoRA. Check target_modules configuration.")
 
-            # Freeze base model parameters and ensure LoRA parameters are trainable
+            # Freeze base model parameters and ensure ONLY LoRA parameters are trainable
             # This is critical for trainable_parameters() to work correctly
             try:
                 # Freeze the entire model first
                 mlx_model.freeze()
                 
-                # Then unfreeze LoRA parameters
-                def unfreeze_lora(module, depth=0):
-                    """Recursively unfreeze LoRA parameters."""
-                    if depth > 20:
-                        return
-                    if hasattr(module, 'items'):
-                        try:
-                            for name, child in module.items():
-                                if isinstance(child, _LoRALinear):
-                                    # Unfreeze this LoRA layer
-                                    child.unfreeze()
-                                elif isinstance(child, nn.Module) or hasattr(child, 'items'):
-                                    unfreeze_lora(child, depth + 1)
-                        except Exception:
-                            pass
+                # Then selectively unfreeze ONLY lora_a and lora_b parameters
+                for m in mlx_model.modules():
+                    if isinstance(m, _LoRALinear):
+                        # Unfreeze only the LoRA weights, not the base weights
+                        m.unfreeze(keys=['lora_a', 'lora_b'], strict=False)
                 
-                # Unfreeze LoRA parameters starting from base model
-                if hasattr(mlx_model, 'model'):
-                    unfreeze_lora(mlx_model.model)
-                else:
-                    unfreeze_lora(mlx_model)
-                
-                logger.debug("Frozen base model parameters, unfrozen LoRA parameters")
+                logger.debug("Frozen base model parameters, unfrozen LoRA parameters (lora_a, lora_b)")
             except Exception as e:
                 logger.warning(f"Could not freeze/unfreeze parameters: {e}")
 
             # Mark that adapter is added
             model._has_adapter = True
 
-            # Count LoRA parameters recursively
-            # Count LoRA parameters by recursively traversing the model
-            def count_lora_params(module, depth=0):
-                """Recursively count LoRA parameters."""
-                if depth > 20:
-                    return 0
-                count = 0
-                # Check if this module has items() (MLX dict-like interface)
-                if hasattr(module, 'items'):
-                    try:
-                        for name, child in module.items():
-                            # Check if this is a LoRALinear module
-                            if isinstance(child, _LoRALinear):
-                                # LoRALinear has lora_a and lora_b parameters
-                                if hasattr(child, 'parameters'):
-                                    child_params = child.parameters()
-                                    # Count lora_a and lora_b
-                                    for param_name in child_params.keys():
-                                        if 'lora' in param_name.lower():
-                                            count += 1
-                            # Recurse into nested modules
-                            if isinstance(child, nn.Module) or hasattr(child, 'items'):
-                                count += count_lora_params(child, depth + 1)
-                    except Exception as e:
-                        logger.debug(f"Error counting LoRA params at depth {depth}: {e}")
-                return count
+            # Count LoRA layers
+            lora_layer_count = 0
+            for m in mlx_model.modules():
+                if isinstance(m, _LoRALinear):
+                    lora_layer_count += 1
             
-            # Count LoRA parameters starting from the base model (same path as conversion)
-            if hasattr(mlx_model, 'model'):
-                lora_param_count = count_lora_params(mlx_model.model)
-            else:
-                lora_param_count = count_lora_params(mlx_model)
+            # Count trainable parameters (lora_a + lora_b per layer = 2 * layer_count)
+            trainable_param_count = lora_layer_count * 2
             
             logger.info(
                 f"Added LoRA adapter '{adapter_name}' "
-                f"({lora_param_count} LoRA parameter groups, {converted_count} layers converted)"
+                f"({lora_layer_count} LoRA layers, {trainable_param_count} trainable parameter groups)"
             )
             return model
 

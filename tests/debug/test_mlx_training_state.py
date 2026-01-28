@@ -36,26 +36,28 @@ def snapshot_parameters(model) -> Dict[str, Any]:
     Returns:
         Dict mapping parameter names to numpy arrays
     """
+    from mlx.utils import tree_flatten
+    
     snapshot = {}
     mlx_model = model.get_underlying_model()
     
-    # MLX models use .parameters() which returns a dict
+    # Use tree_flatten to get all parameters including nested LoRA params
     try:
         params_dict = mlx_model.parameters()
-        for name, param in params_dict.items():
+        flat_params = tree_flatten(params_dict)
+        
+        for name, param in flat_params:
             # Convert MLX array to numpy for comparison
             snapshot[name] = np.array(param)
-    except AttributeError:
-        # Fallback: try named_parameters if it exists
+    except Exception as e:
+        logger.warning(f"Could not flatten parameters: {e}")
+        # Fallback to top-level parameters only
         try:
-            for name, param in mlx_model.named_parameters():
+            params_dict = mlx_model.parameters()
+            for name, param in params_dict.items():
                 snapshot[name] = np.array(param)
-        except AttributeError:
-            # Last resort: try to get parameters as a dict
-            if hasattr(mlx_model, '__dict__'):
-                for name, value in mlx_model.__dict__.items():
-                    if isinstance(value, mx.array):
-                        snapshot[name] = np.array(value)
+        except Exception:
+            pass
     
     return snapshot
 
@@ -272,6 +274,12 @@ def test_mlx_training_state():
     
     optimizer = optim.AdamW(learning_rate=learning_rate, weight_decay=0.01)
     
+    # Initialize optimizer with trainable parameters (CRITICAL for MLX)
+    optimizer.init(mlx_model.trainable_parameters())
+    
+    # Set model to training mode
+    mlx_model.train()
+    
     print(f"Training config: epochs={num_epochs}, lr={learning_rate}, batch_size={batch_size}")
     
     # Format training data
@@ -330,16 +338,20 @@ def test_mlx_training_state():
     print("\nStarting training...")
     losses = []
     
+    # Create loss_value_and_grad function using nn.value_and_grad
+    # This automatically computes gradients only for trainable parameters
+    loss_value_and_grad = nn.value_and_grad(mlx_model, loss_fn)
+    
     for epoch in range(num_epochs):
-        # Compute loss and gradients
-        loss, grads = mx.value_and_grad(loss_fn)(mlx_model, input_ids, labels)
+        # Compute loss and gradients (only for trainable params)
+        loss, grads = loss_value_and_grad(mlx_model, input_ids, labels)
         
         # Skip if loss is NaN
         if mx.isnan(loss).item() or mx.isinf(loss).item():
             print(f"⚠ NaN/Inf loss detected, skipping")
             continue
         
-        # Update parameters
+        # Update parameters (grads already filtered to trainable params)
         optimizer.update(mlx_model, grads)
         
         # Force evaluation (MLX is lazy)
