@@ -62,44 +62,76 @@ class MLXAdapterManager(AdapterManager):
             )
 
             # Convert linear layers to LoRA layers
-            # Recursively traverse model and convert matching modules
+            # MLX models use a dictionary-like structure, so we need to traverse properly
             def convert_to_lora(module, parent_name="", depth=0):
                 """Recursively convert linear layers to LoRA layers."""
-                if depth > 10:  # Safety limit to prevent infinite recursion
-                    return
+                if depth > 20:  # Safety limit to prevent infinite recursion
+                    return 0
                 
                 converted_count = 0
                 
-                # Process module's attributes
-                if hasattr(module, '__dict__'):
-                    for name, child in list(module.__dict__.items()):
-                        if name.startswith('_'):
-                            continue
+                # MLX modules can be accessed via items() or direct attribute access
+                # Try both methods
+                items_to_check = []
+                
+                # Method 1: Try items() if available (MLX dict-like interface)
+                if hasattr(module, 'items'):
+                    try:
+                        items_to_check = list(module.items())
+                    except Exception:
+                        pass
+                
+                # Method 2: Try __dict__ for standard Python objects
+                if not items_to_check and hasattr(module, '__dict__'):
+                    items_to_check = [(k, v) for k, v in module.__dict__.items() if not k.startswith('_')]
+                
+                # Method 3: Try direct attribute access for common MLX patterns
+                if not items_to_check:
+                    # Try common MLX module attributes
+                    for attr_name in ['q_proj', 'k_proj', 'v_proj', 'o_proj', 'gate_proj', 'up_proj', 'down_proj']:
+                        if hasattr(module, attr_name):
+                            items_to_check.append((attr_name, getattr(module, attr_name)))
+                
+                # Process items
+                for name, child in items_to_check:
+                    if name.startswith('_'):
+                        continue
+                    
+                    full_name = f"{parent_name}.{name}" if parent_name else name
+                    
+                    # Check if this is a Linear layer that should be converted
+                    if isinstance(child, nn.Linear):
+                        # Check if this module should be converted
+                        should_convert = any(
+                            target in name for target in mlx_config['target_modules']
+                        )
                         
-                        full_name = f"{parent_name}.{name}" if parent_name else name
-                        
-                        if isinstance(child, nn.Linear):
-                            # Check if this module should be converted
-                            should_convert = any(
-                                target in name for target in mlx_config['target_modules']
-                            )
-                            
-                            if should_convert:
-                                logger.debug(f"Converting {full_name} to LoRA")
-                                try:
-                                    # Convert to LoRA layer
-                                    lora_layer = LoRALinear.from_linear(
-                                        child,
-                                        r=mlx_config['rank'],
-                                        scale=mlx_config['scale'],
-                                        dropout=mlx_config.get('dropout', 0.0),
-                                    )
+                        if should_convert:
+                            logger.info(f"Converting {full_name} to LoRA")
+                            try:
+                                # Convert to LoRA layer
+                                lora_layer = LoRALinear.from_linear(
+                                    child,
+                                    r=mlx_config['rank'],
+                                    scale=mlx_config['scale'],
+                                    dropout=mlx_config.get('dropout', 0.0),
+                                )
+                                # Set the LoRA layer back
+                                if hasattr(module, '__setitem__'):
+                                    # Dictionary-like interface
+                                    module[name] = lora_layer
+                                else:
+                                    # Standard attribute interface
                                     setattr(module, name, lora_layer)
-                                    converted_count += 1
-                                except Exception as e:
-                                    logger.warning(f"Failed to convert {full_name}: {e}")
-                        elif hasattr(child, '__dict__') or isinstance(child, nn.Module):
-                            # Recursively process nested modules
+                                converted_count += 1
+                            except Exception as e:
+                                logger.warning(f"Failed to convert {full_name}: {e}")
+                                import traceback
+                                logger.debug(traceback.format_exc())
+                    else:
+                        # Recursively process nested modules
+                        # Check if it's a module-like object
+                        if isinstance(child, nn.Module) or hasattr(child, 'items') or hasattr(child, '__dict__'):
                             converted_count += convert_to_lora(child, full_name, depth + 1)
                 
                 return converted_count
