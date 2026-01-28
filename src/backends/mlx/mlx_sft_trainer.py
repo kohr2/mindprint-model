@@ -202,7 +202,7 @@ class MLXSFTTrainer(SFTTrainerInterface):
                     # This computes gradients only for trainable params (LoRA when adapter present)
                     import mlx.nn as nn
                     loss_value_and_grad = nn.value_and_grad(mlx_model, loss_fn)
-                    (loss, toks), grads = loss_value_and_grad(mlx_model, input_ids, labels)
+                    loss, grads = loss_value_and_grad(mlx_model, input_ids, labels)
 
                     # Skip if loss is NaN
                     if mx.isnan(loss).item() or mx.isinf(loss).item():
