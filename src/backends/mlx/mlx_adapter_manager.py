@@ -208,19 +208,30 @@ class MLXAdapterManager(AdapterManager):
                     try:
                         for name, child in module.items():
                             # Check if this is a LoRALinear module
-                            if hasattr(child, '__class__') and 'LoRALinear' in str(type(child)):
-                                # LoRALinear has lora_a and lora_b parameters
-                                if hasattr(child, 'parameters'):
-                                    child_params = child.parameters()
-                                    # Count lora_a and lora_b
-                                    for param_name in child_params.keys():
-                                        if 'lora' in param_name.lower():
-                                            count += 1
+                            # Use isinstance check with imported LoRALinear
+                            try:
+                                from mlx_lm.tuner.lora import LoRALinear
+                                if isinstance(child, LoRALinear):
+                                    # LoRALinear has lora_a and lora_b parameters
+                                    if hasattr(child, 'parameters'):
+                                        child_params = child.parameters()
+                                        # Count lora_a and lora_b
+                                        for param_name in child_params.keys():
+                                            if 'lora' in param_name.lower():
+                                                count += 1
+                            except ImportError:
+                                # Fallback: check type name
+                                if hasattr(child, '__class__') and 'LoRALinear' in str(type(child)):
+                                    if hasattr(child, 'parameters'):
+                                        child_params = child.parameters()
+                                        for param_name in child_params.keys():
+                                            if 'lora' in param_name.lower():
+                                                count += 1
                             # Recurse into nested modules
-                            elif isinstance(child, nn.Module) or hasattr(child, 'items'):
+                            if isinstance(child, nn.Module) or hasattr(child, 'items'):
                                 count += count_lora_params(child, depth + 1)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"Error counting LoRA params at depth {depth}: {e}")
                 return count
             
             lora_param_count = count_lora_params(mlx_model)
