@@ -285,13 +285,57 @@ QWEN_7B_CONFIG = ModelConfig(
     prompt_format="chatml",
 )
 
+QWEN_72B_CONFIG = ModelConfig(
+    name="qwen2.5-72b",
+    hf_path="Qwen/Qwen2.5-72B-Instruct",
+    layers=80,
+    hidden_size=8192,
+    attention_heads=64,
+    kv_heads=8,
+    context_length=131072,
+    layer_zones={
+        "lexicon": LayerZone(
+            name="lexicon",
+            layers=list(range(0, 20)),  # 20 layers (25%)
+            modules=["q_proj"],
+            content="Bob's terminology (4-year cycle, accumulation, distribution, cycle low/high)",
+        ),
+        "reasoning": LayerZone(
+            name="reasoning",
+            layers=list(range(20, 60)),  # 40 layers (50%)
+            modules=["v_proj", "up_proj", "down_proj"],
+            content="Cycle theory, pattern recognition, market psychology analysis",
+        ),
+        "voice": LayerZone(
+            name="voice",
+            layers=list(range(60, 80)),  # 20 layers (25%)
+            modules=["o_proj", "up_proj", "down_proj"],
+            content="Confidence markers, teaching style, engagement patterns",
+        ),
+    },
+    lora=LoRAConfig(
+        r=8,
+        alpha=16,
+        dropout=0.05,
+        target_modules=["q_proj", "v_proj", "o_proj", "up_proj", "down_proj"],
+    ),
+    compute=ComputeRequirements(
+        vram_4bit=36,
+        vram_bf16=145,
+        recommended_batch_size=1,
+        estimated_hours_dpo=100,
+        estimated_hours_ppo=150,
+    ),
+    prompt_format="chatml",
+)
+
 
 def get_model_config(model_name: str) -> ModelConfig:
     """
     Get a pre-defined model configuration.
 
     Args:
-        model_name: "gemma" or "qwen"
+        model_name: "gemma", "qwen", "qwen-72b", etc.
 
     Returns:
         ModelConfig instance
@@ -303,6 +347,8 @@ def get_model_config(model_name: str) -> ModelConfig:
         "qwen": QWEN_7B_CONFIG,
         "qwen-7b": QWEN_7B_CONFIG,
         "qwen2.5-7b": QWEN_7B_CONFIG,
+        "qwen-72b": QWEN_72B_CONFIG,
+        "qwen2.5-72b": QWEN_72B_CONFIG,
     }
 
     if model_name.lower() not in configs:

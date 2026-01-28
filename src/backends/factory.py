@@ -111,6 +111,7 @@ def create_backend(
     backend_type: str,
     device: str = "auto",
     dtype: str = "float16",
+    quantization: str = None,
     seed: int = 42,
     **kwargs,
 ) -> BackendProtocol:
@@ -121,6 +122,7 @@ def create_backend(
         backend_type: Backend name ("pytorch" or "mlx")
         device: Device to use ("auto", "mps", "cuda", "cpu", "gpu")
         dtype: Data type ("float16", "float32", "bfloat16")
+        quantization: Quantization type ("int4", "int8", or None)
         seed: Random seed
         **kwargs: Additional config parameters
 
@@ -130,11 +132,15 @@ def create_backend(
     Example:
         >>> backend = create_backend("mlx", device="mps")
         >>> model = backend.load_model("Qwen/Qwen2.5-7B-Instruct")
+        >>> # With quantization
+        >>> backend = create_backend("pytorch", quantization="int4")
+        >>> model = backend.load_model("Qwen/Qwen2.5-72B-Instruct")
     """
     config = BackendConfig(
         backend_type=backend_type,
         device=device,
         dtype=dtype,
+        quantization=quantization,
         seed=seed,
     )
 

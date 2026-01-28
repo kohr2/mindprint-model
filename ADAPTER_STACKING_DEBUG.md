@@ -232,6 +232,55 @@ The adapter management is now correct (confirmed by logs), but there's still an 
 
 ---
 
-**Last Updated**: 2026-01-10 09:55
-**Training Status**: Running (Topic 4+)
-**Next Check**: Wait for training completion or check in 30 minutes
+## Update: MLX Backend LoRA Training Issue (Jan 28, 2026)
+
+### New Discovery: MLX Not Using LoRA At All
+
+While investigating continued `voice_score=0.00` issues with MLX backend, discovered that the MLX backend was never actually using LoRA adapters:
+
+**Problem**: 
+- `MLXAdapterManager.add_adapter()` was a stub implementation
+- Only set `_has_adapter = True` flag without converting layers
+- Training modified full model weights (7B parameters)
+- Caused model corruption similar to PyTorch MPS issues
+- Generated 512 `<|endoftext|>` tokens after training
+
+**Diagnostic Test Results**:
+```
+Parameter Statistics:
+  Total parameters: 2 (model, lm_head)
+  LoRA parameters found: 0
+  
+Generation After Training:
+  <|endoftext|> count: 512 (vs 0 baseline)
+  Voice score: 0.0000 (vs 0.1167 baseline)
+```
+
+**Solution Implemented**:
+- Proper LoRA layer conversion using `mlx_lm.tuner.lora.LoRALinear`
+- Recursive traversal and conversion of Linear layers
+- Gradient filtering to train only LoRA parameters (~8M vs 7B)
+- Trains only LoRA parameters, base model remains frozen
+- Prevents base model corruption
+
+**Impact**:
+This explains why MLX backend had similar issues to PyTorch MPS despite being a different framework. Both were corrupting the base model, just for different reasons:
+
+| Backend | Issue | Corruption Point | Solution |
+|---------|-------|------------------|----------|
+| PyTorch MPS | Non-contiguous tensor bug | During `merge_and_unload()` | Use MLX backend |
+| MLX (before fix) | No LoRA adapters | During training (full model) | Implement LoRA (fixed) |
+| MLX (after fix) | None | N/A | LoRA protects base model |
+
+**Documentation**:
+- Complete investigation: `docs/mlx/MLX_LORA_TRAINING_ISSUE.md`
+- Architecture details: `docs/mlx/MLX_LORA_ARCHITECTURE.md`
+- Troubleshooting: `docs/mlx/MLX_BACKEND_TROUBLESHOOTING.md`
+
+**Status**: ✅ Fixed and ready for testing
+
+---
+
+**Last Updated**: 2026-01-28 14:30
+**Training Status**: MLX LoRA fix implemented
+**Next Check**: Run full training pipeline with LoRA adapters

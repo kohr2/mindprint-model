@@ -130,8 +130,28 @@ class MLXSFTTrainer(SFTTrainerInterface):
                         else:
                             continue
 
-                        # Format as instruction prompt
-                        text = f"""<start_of_turn>user
+                        # Format using tokenizer's chat template if available (Qwen, Llama, etc.)
+                        if hasattr(tokenizer, 'apply_chat_template') and tokenizer.chat_template is not None:
+                            try:
+                                messages = [
+                                    {"role": "user", "content": instruction},
+                                    {"role": "assistant", "content": output}
+                                ]
+                                text = tokenizer.apply_chat_template(
+                                    messages,
+                                    tokenize=False,
+                                    add_generation_prompt=False  # We have the full conversation
+                                )
+                            except Exception as e:
+                                logger.warning(f"Failed to use chat template: {e}, falling back to default format")
+                                # Fallback to Gemma-3 format
+                                text = f"""<start_of_turn>user
+{instruction}<end_of_turn>
+<start_of_turn>model
+{output}<end_of_turn>"""
+                        else:
+                            # Fallback to Gemma-3 format for models without chat template
+                            text = f"""<start_of_turn>user
 {instruction}<end_of_turn>
 <start_of_turn>model
 {output}<end_of_turn>"""
@@ -187,8 +207,21 @@ class MLXSFTTrainer(SFTTrainerInterface):
                         logger.warning("NaN/Inf loss detected, skipping batch")
                         continue
 
-                    # Update parameters
-                    optimizer.update(mlx_model, grads)
+                    # Filter gradients to only LoRA parameters if adapter is present
+                    if self._mlx_model.has_adapter():
+                        lora_grads = {}
+                        for name, grad in grads.items():
+                            if 'lora' in name.lower():
+                                lora_grads[name] = grad
+                        
+                        if lora_grads:
+                            # Update only LoRA parameters
+                            optimizer.update(mlx_model, lora_grads)
+                        else:
+                            logger.warning("No LoRA gradients found, skipping update")
+                    else:
+                        # No adapter: update all parameters (legacy behavior)
+                        optimizer.update(mlx_model, grads)
 
                     # Force evaluation (MLX is lazy)
                     mx.eval(mlx_model.parameters())

@@ -287,9 +287,40 @@ All commits pushed to both `shared` and `dpo` branches.
 - [x] Config validation implemented
 - [x] Device management implemented
 
+### MLX LoRA Training Fix (Jan 28, 2026) ✅
+
+**Problem Discovered**: MLX backend was training full model weights instead of LoRA adapters
+
+**Investigation**:
+- Created diagnostic test (`tests/debug/test_mlx_training_state.py`)
+- Found no LoRA parameters in trained model (only 2 param groups: model, lm_head)
+- Identified stub implementation in `MLXAdapterManager.add_adapter()`
+- Training corrupted 7B base model weights
+
+**Solution Implemented**:
+- Proper LoRA layer conversion using `mlx_lm.tuner.lora.LoRALinear`
+- Recursive traversal and conversion of Linear layers to LoRALinear
+- Gradient filtering to train only LoRA parameters (~8M vs 7B)
+- Model path tracking for config lookup
+- Comprehensive diagnostic test suite
+
+**Files Modified**:
+- `src/backends/mlx/mlx_adapter_manager.py` - Implemented LoRA conversion (70 lines)
+- `src/backends/mlx/mlx_backend.py` - Add adapter before training, model name mapping
+- `src/backends/mlx/mlx_sft_trainer.py` - Filter gradients to LoRA only
+- `src/backends/mlx/mlx_model.py` - Track model path, count LoRA params
+- `tests/debug/test_mlx_training_state.py` - Comprehensive diagnostic test (570 lines)
+
+**Documentation**:
+- `docs/mlx/MLX_LORA_TRAINING_ISSUE.md` - Complete investigation timeline
+- `docs/mlx/MLX_BACKEND_TROUBLESHOOTING.md` - Troubleshooting guide
+- `docs/mlx/MLX_LORA_ARCHITECTURE.md` - Technical architecture
+
+**Status**: ✅ Fixed and ready for testing
+
 ### Pending (Real-World Testing) ⏳
 
-- [ ] Full model training on Mac Studio (MLX)
+- [ ] Full model training on Mac Studio (MLX with LoRA fix)
 - [ ] Full model training on cloud GPU (PyTorch)
 - [ ] Performance benchmarking (actual metrics)
 - [ ] Voice score comparison across backends
@@ -298,12 +329,16 @@ All commits pushed to both `shared` and `dpo` branches.
 
 ### Next Steps for Production
 
-1. **Test on Mac Studio**: Train a full topic with MLX backend
+1. **Test on Mac Studio**: Train a full topic with MLX backend ✅ Scripts ready
+   - See [MLX Real-World Testing Guide](MLX_REAL_WORLD_TESTING.md) for detailed instructions
+   - Use `scripts/test_single_topic_mlx.sh` for initial validation
+   - Use `scripts/train_on_mac_studio.sh` for deployment
 2. **Test on Cloud GPU**: Train same topic with PyTorch backend
 3. **Compare Results**: Voice scores, losses, inference quality
 4. **Performance Profiling**: Measure actual training times and memory usage
+   - Use `scripts/monitor_training.sh` to collect metrics
 5. **Update Benchmarks**: Replace placeholder benchmarks with real data
-6. **Production Deployment**: Deploy to Mac Studio with MLX
+6. **Production Deployment**: Deploy to Mac Studio with MLX ✅ Scripts ready
 
 ---
 

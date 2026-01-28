@@ -24,6 +24,7 @@ class MLXModel(ModelInterface):
         self,
         model: Any,  # mlx-lm model
         tokenizer: Any,  # HuggingFace tokenizer
+        model_path: Optional[str] = None,  # Original model path/name
     ):
         """
         Initialize MLX model wrapper.
@@ -31,9 +32,11 @@ class MLXModel(ModelInterface):
         Args:
             model: MLX model (from mlx-lm)
             tokenizer: Tokenizer for this model (HuggingFace compatible)
+            model_path: Original model path/name (for config lookup)
         """
         self._model = model
         self._tokenizer = tokenizer
+        self._model_path = model_path
         self._has_adapter = False  # Track if LoRA adapter is attached
 
         logger.info(f"Initialized MLXModel wrapper")
@@ -308,7 +311,18 @@ class MLXModel(ModelInterface):
     @property
     def num_trainable_parameters(self) -> int:
         """Get number of trainable parameters."""
-        # For LoRA, this would be much smaller than total parameters
+        if self._has_adapter:
+            # Count only LoRA parameters when adapter is present
+            try:
+                total = 0
+                params_dict = self._model.parameters()
+                for name, param in params_dict.items():
+                    if 'lora' in name.lower():
+                        total += param.size
+                return total
+            except Exception:
+                return 0
+        # No adapter: return total parameters (legacy behavior)
         return self.num_parameters
 
     def get_underlying_model(self) -> Any:

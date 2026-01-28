@@ -11,6 +11,22 @@ RLHF (Reinforcement Learning from Human Feedback) fine-tuning system for creatin
 - **Curriculum Learning**: Progressive training across multiple topics
 - **Voice Fidelity Evaluation**: Assess how well the model maintains target voice/style
 
+### Backend Status
+
+**PyTorch Backend** (Cloud GPU):
+- Status: ✅ Production Ready
+- Platform: CUDA GPUs
+- Features: Full TRL support, PEFT adapters
+- Known Issues: MPS backend has adapter corruption bugs (use MLX instead)
+
+**MLX Backend** (Mac Studio):
+- Status: ✅ Production Ready (LoRA support fixed Jan 28, 2026)
+- Platform: Apple Silicon (M1/M2/M3)
+- Features: Native optimization, proper LoRA implementation, no corruption issues
+- Recent Fixes: Implemented proper LoRA layer conversion (was stub before)
+
+See `docs/mlx/MLX_LORA_TRAINING_ISSUE.md` for details on the MLX LoRA investigation and fix.
+
 ## Quick Start
 
 ### Installation
@@ -77,6 +93,21 @@ dpo:
   lora_r: 1
   lora_alpha: 2
 ```
+
+## Supported Models
+
+| Model | Parameters | Layers | VRAM (INT4) | VRAM (FP16) | Context | Platform |
+|-------|------------|--------|-------------|-------------|---------|----------|
+| Gemma-3-12B | 12B | 48 | 12GB | 24GB | 128K | Mac Studio (fp16), Cloud GPU |
+| Qwen2.5-7B | 7B | 28 | 8GB | 14GB | 131K | Mac Studio (fp16), Cloud GPU |
+| **Qwen2.5-72B** | **72.7B** | **80** | **36GB** | **145GB** | **131K** | **Mac Studio (int4), Cloud GPU** |
+
+**Notes:**
+- **Mac Studio M2 Ultra (64GB)**: Can run Gemma-3-12B and Qwen2.5-7B in fp16, or Qwen2.5-72B in int4 quantization
+- **Cloud GPU (8x H100)**: Required for Qwen2.5-72B in fp16/bf16
+- **INT4 quantization**: Enables large models on limited memory with minimal quality loss
+
+For detailed model specifications and training recommendations, see [docs/models/](docs/models/).
 
 ## Architecture
 
@@ -250,6 +281,8 @@ score = calculate_voice_fidelity(
 
 ## Testing
 
+### Unit and Integration Tests
+
 ```bash
 # Run all tests
 pytest
@@ -267,11 +300,32 @@ pytest tests/integration/ -v
 pytest tests/integration/test_backend_equivalence.py --run-slow
 ```
 
+### Real-World Testing on Mac Studio
+
+For testing the MLX backend on Mac Studio:
+
+```bash
+# Verify configuration (dry-run)
+./scripts/test_dry_run.sh
+
+# Test single topic
+./scripts/test_single_topic_mlx.sh unit-01 chapter-01 topic-01
+
+# Monitor training
+./scripts/monitor_training.sh
+
+# Deploy from local machine
+./scripts/train_on_mac_studio.sh mac-studio.local user
+```
+
+See [MLX Real-World Testing Guide](docs/MLX_REAL_WORLD_TESTING.md) for detailed instructions.
+
 ## Documentation
 
 - [Backend System README](src/backends/README.md) - API documentation for backend abstraction
 - [Migration Guide](docs/MIGRATION.md) - Migrating existing code to use backends
 - [Deployment Guide](docs/DEPLOYMENT.md) - Production deployment instructions
+- [MLX Real-World Testing Guide](docs/MLX_REAL_WORLD_TESTING.md) - Testing MLX backend on Mac Studio
 - [Adapter Stacking Debug](ADAPTER_STACKING_DEBUG.md) - Debugging adapter issues
 - [Testing Instructions](TESTING_INSTRUCTIONS.md) - Testing procedures
 
@@ -304,13 +358,22 @@ pytest tests/integration/test_backend_equivalence.py --run-slow
 
 ## Performance
 
-### Benchmarks (Qwen2.5-7B)
+### Benchmarks
+
+**Qwen2.5-7B**:
 
 | Backend | Device | SFT Time/Epoch | DPO Time/100 steps | Memory Usage |
 |---------|--------|----------------|-------------------|--------------|
 | PyTorch | CUDA (A100) | 45 min | 12 min | 24 GB |
 | PyTorch | CPU | 8 hours | 2 hours | 16 GB |
 | MLX | M2 Ultra | 2 hours | 30 min | 32 GB unified |
+
+**Qwen2.5-72B** (with INT4 quantization):
+
+| Backend | Device | SFT Time/Topic | DPO Time/Topic | Memory Usage |
+|---------|--------|----------------|----------------|--------------|
+| MLX | M2 Ultra (64GB) | 6-8 hours | 8-10 hours | 44-48 GB unified |
+| PyTorch | 8x H100 80GB | 2-3 hours | 3-4 hours | ~500 GB (distributed) |
 
 *Note: Times are approximate and depend on dataset size, batch size, and sequence length.*
 

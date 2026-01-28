@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional
 from pathlib import Path
 import logging
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 from ..protocol import BackendProtocol, BackendConfig
 from ..model_interface import ModelInterface
@@ -110,19 +110,50 @@ class PyTorchBackend(BackendProtocol):
                 tokenizer.pad_token = tokenizer.eos_token
                 logger.info("Set pad_token to eos_token")
 
+            # Create quantization config if requested
+            quantization_config = None
+            if self._config.quantization is not None:
+                logger.info(f"Setting up {self._config.quantization} quantization")
+                if self._config.quantization == "int4":
+                    quantization_config = BitsAndBytesConfig(
+                        load_in_4bit=True,
+                        bnb_4bit_quant_type="nf4",
+                        bnb_4bit_compute_dtype=torch.bfloat16,
+                        bnb_4bit_use_double_quant=True,  # Nested quantization
+                    )
+                elif self._config.quantization == "int8":
+                    quantization_config = BitsAndBytesConfig(
+                        load_in_8bit=True,
+                    )
+                else:
+                    raise ValueError(
+                        f"Unsupported quantization: {self._config.quantization}. "
+                        f"Supported: 'int4', 'int8', None"
+                    )
+
+            # Determine device_map strategy
+            # Use "auto" for quantization (distributes across GPUs automatically)
+            # Use None for manual placement otherwise
+            device_map = "auto" if quantization_config is not None else None
+
             # Load base model
-            logger.info(f"Loading base model with dtype={torch_dtype}")
+            logger.info(f"Loading base model with dtype={torch_dtype}, device_map={device_map}")
             model = AutoModelForCausalLM.from_pretrained(
                 model_path,
                 torch_dtype=torch_dtype,
                 trust_remote_code=True,
-                device_map=None,  # Manual device placement
+                device_map=device_map,
+                quantization_config=quantization_config,
+                low_cpu_mem_usage=True,
             )
 
-            # Move to device
-            device = self._device_manager.get_device()
-            model = model.to(device)
-            logger.info(f"Moved model to {device}")
+            # Move to device if not using auto device_map
+            if device_map is None:
+                device = self._device_manager.get_device()
+                model = model.to(device)
+                logger.info(f"Moved model to {device}")
+            else:
+                logger.info(f"Model loaded with automatic device placement")
 
             # Wrap in PyTorchModel
             wrapped_model = PyTorchModel(model, tokenizer)

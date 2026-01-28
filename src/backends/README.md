@@ -150,7 +150,7 @@ src/backends/mlx/
 **Features:**
 - Manual training loops (no TRL equivalent)
 - Manual DPO loss (Bradley-Terry model)
-- mlx-lm native LoRA support
+- mlx-lm native LoRA support (fixed Jan 28, 2026)
 - Unified memory (no explicit device placement)
 - ✅ No corruption issues
 
@@ -159,6 +159,69 @@ src/backends/mlx/
 - No adapter corruption bugs
 - Native M-series optimization
 - Simple memory management
+- Proper LoRA adapter implementation
+
+### LoRA Adapter Implementation
+
+The MLX backend implements LoRA adapters using `mlx_lm.tuner.lora`:
+
+**Key Components**:
+1. **Layer Conversion**: Recursively converts `nn.Linear` layers to `LoRALinear`
+2. **Target Modules**: Converts q_proj, v_proj, o_proj, up_proj, down_proj
+3. **Gradient Filtering**: Only LoRA parameters receive gradients during training
+4. **Parameter Counting**: Tracks trainable parameters (LoRA only, ~8M for Qwen2.5-7B)
+
+**Implementation Details**:
+
+```python
+# In mlx_adapter_manager.py
+def add_adapter(self, model, config):
+    """
+    Convert Linear layers to LoRA layers.
+    
+    Process:
+    1. Recursively traverse model structure
+    2. Find Linear layers matching target_modules
+    3. Convert using LoRALinear.from_linear()
+    4. Track conversion count
+    """
+    from mlx_lm.tuner.lora import LoRALinear
+    
+    # Convert Linear to LoRA
+    lora_layer = LoRALinear.from_linear(
+        linear_layer,
+        r=config.r,              # Rank (typically 8)
+        scale=config.alpha / config.r,  # Scale factor (2.0)
+        dropout=config.dropout,  # Dropout (0.05)
+    )
+    
+    # Replace in model
+    setattr(parent_module, layer_name, lora_layer)
+```
+
+**Gradient Filtering**:
+
+```python
+# In mlx_sft_trainer.py
+loss, grads = mx.value_and_grad(loss_fn)(model, inputs, labels)
+
+# Filter to LoRA gradients only
+if model.has_adapter():
+    lora_grads = {
+        name: grad 
+        for name, grad in grads.items() 
+        if 'lora' in name.lower()
+    }
+    optimizer.update(model, lora_grads)  # Update LoRA only
+```
+
+**Verification**:
+- LoRA parameters should be named with "lora_a" or "lora_b" suffix
+- Trainable parameters should be ~1% of total (8M vs 7B)
+- Base model parameters remain frozen during training
+- Check with: `model.num_trainable_parameters` (should be < 10M)
+
+**Historical Note**: Early versions (before Jan 28, 2026) had a stub implementation that didn't actually add LoRA adapters. This caused full model training and corruption. See `docs/mlx/MLX_LORA_TRAINING_ISSUE.md` for investigation details.
 
 ## PyTorch vs MLX
 

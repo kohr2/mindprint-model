@@ -347,8 +347,19 @@ class QuizEvaluator:
 
                 # Check if output is string (MLX) or tensor (PyTorch)
                 if isinstance(output, str):
-                    # MLX returns string directly
-                    answer = output
+                    # MLX returns string directly - mlx_lm.generate returns full text including prompt
+                    # Extract only the generated part after the prompt
+                    if prompt.strip() in output:
+                        # Find where prompt ends and extract from there
+                        prompt_end_idx = output.find(prompt.strip()) + len(prompt.strip())
+                        answer = output[prompt_end_idx:].strip()
+                    else:
+                        # If prompt not found, assume entire output is the answer
+                        answer = output.strip()
+                    
+                    # Log if answer is suspiciously short or empty
+                    if len(answer) < 10:
+                        logger.warning(f"Very short generated answer ({len(answer)} chars): '{answer[:100]}'")
                 else:
                     # PyTorch returns tokens
                     answer = self.tokenizer.decode(
@@ -380,7 +391,21 @@ class QuizEvaluator:
         return answers
 
     def _format_prompt(self, question: str) -> str:
-        """Format question as model prompt (Gemma-3 format)."""
+        """Format question as model prompt using tokenizer's chat template."""
+        # Try to use tokenizer's chat template if available (Qwen, Llama, etc.)
+        if hasattr(self.tokenizer, 'apply_chat_template') and self.tokenizer.chat_template is not None:
+            try:
+                messages = [{"role": "user", "content": question}]
+                prompt = self.tokenizer.apply_chat_template(
+                    messages,
+                    tokenize=False,
+                    add_generation_prompt=True
+                )
+                return prompt
+            except Exception as e:
+                logger.warning(f"Failed to use chat template: {e}, falling back to default format")
+        
+        # Fallback to Gemma-3 format for models without chat template
         return f"""<start_of_turn>user
 {question}<end_of_turn>
 <start_of_turn>model

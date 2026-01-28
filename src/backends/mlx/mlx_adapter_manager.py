@@ -47,7 +47,6 @@ class MLXAdapterManager(AdapterManager):
 
         try:
             from mlx_lm.tuner.lora import LoRALinear
-            from mlx_lm.models.base import BaseModelArgs
             import mlx.nn as nn
 
             # Get underlying MLX model
@@ -56,25 +55,95 @@ class MLXAdapterManager(AdapterManager):
             # Convert config to MLX format
             mlx_config = config.to_mlx_config()
 
-            # Add LoRA layers to target modules
-            # This is a simplified version - mlx-lm has utilities for this
             logger.info(
                 f"Adding LoRA adapter '{adapter_name}' with "
-                f"rank={config.r}, scale={mlx_config['scale']}"
+                f"rank={config.r}, scale={mlx_config['scale']}, "
+                f"target_modules={mlx_config['target_modules']}"
             )
 
-            # Note: In practice, mlx-lm provides utilities like:
-            # from mlx_lm.tuner import linear_to_lora_layers
-            # linear_to_lora_layers(mlx_model, mlx_config['rank'], ...)
+            # Convert linear layers to LoRA layers
+            # Recursively traverse model and convert matching modules
+            def convert_to_lora(module, parent_name="", depth=0):
+                """Recursively convert linear layers to LoRA layers."""
+                if depth > 10:  # Safety limit to prevent infinite recursion
+                    return
+                
+                converted_count = 0
+                
+                # Process module's attributes
+                if hasattr(module, '__dict__'):
+                    for name, child in list(module.__dict__.items()):
+                        if name.startswith('_'):
+                            continue
+                        
+                        full_name = f"{parent_name}.{name}" if parent_name else name
+                        
+                        if isinstance(child, nn.Linear):
+                            # Check if this module should be converted
+                            should_convert = any(
+                                target in name for target in mlx_config['target_modules']
+                            )
+                            
+                            if should_convert:
+                                logger.debug(f"Converting {full_name} to LoRA")
+                                try:
+                                    # Convert to LoRA layer
+                                    lora_layer = LoRALinear.from_linear(
+                                        child,
+                                        r=mlx_config['rank'],
+                                        scale=mlx_config['scale'],
+                                        dropout=mlx_config.get('dropout', 0.0),
+                                    )
+                                    setattr(module, name, lora_layer)
+                                    converted_count += 1
+                                except Exception as e:
+                                    logger.warning(f"Failed to convert {full_name}: {e}")
+                        elif hasattr(child, '__dict__') or isinstance(child, nn.Module):
+                            # Recursively process nested modules
+                            converted_count += convert_to_lora(child, full_name, depth + 1)
+                
+                return converted_count
 
-            # For now, mark that adapter is added
+            # Convert model layers
+            # MLX models typically have: model.layers[i].attention/q_proj, etc.
+            converted_count = 0
+            if hasattr(mlx_model, 'model'):
+                # Qwen/Llama-style models have a 'model' attribute containing layers
+                converted_count = convert_to_lora(mlx_model.model)
+            elif hasattr(mlx_model, 'layers'):
+                # Direct layers attribute
+                converted_count = convert_to_lora(mlx_model)
+            else:
+                # Try direct conversion
+                converted_count = convert_to_lora(mlx_model)
+            
+            if converted_count == 0:
+                logger.warning("No linear layers were converted to LoRA. Check target_modules configuration.")
+
+            # Mark that adapter is added
             model._has_adapter = True
 
-            logger.info(f"Added LoRA adapter '{adapter_name}'")
+            # Count LoRA parameters
+            lora_param_count = 0
+            try:
+                params_dict = mlx_model.parameters()
+                for name, param in params_dict.items():
+                    if 'lora' in name.lower():
+                        lora_param_count += 1
+            except Exception:
+                pass
+
+            logger.info(
+                f"Added LoRA adapter '{adapter_name}' "
+                f"({lora_param_count} LoRA parameter groups)"
+            )
             return model
 
         except ImportError:
             raise RuntimeError("mlx-lm not installed. Install with: pip install mlx-lm")
+        except Exception as e:
+            logger.error(f"Failed to add LoRA adapter: {e}")
+            raise
 
     def save_adapter(
         self,

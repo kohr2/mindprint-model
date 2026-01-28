@@ -17,6 +17,7 @@ class BackendConfig:
     backend_type: str  # "pytorch" or "mlx"
     device: str = "auto"  # "mps", "cuda", "cpu", "gpu", "auto"
     dtype: str = "float16"  # "float16", "float32", "bfloat16"
+    quantization: Optional[str] = None  # "int4", "int8", None for no quantization
     seed: int = 42
     validate: bool = True  # Set to False to skip validation (for testing)
 
