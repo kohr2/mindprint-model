@@ -270,11 +270,10 @@ class MLXSFTTrainer(SFTTrainerInterface):
                                         if isinstance(param_val, LoRALinear):
                                             # This is a LoRA layer, extract its gradients
                                             lora_layer_grads = {}
-                                            if isinstance(param_val, dict):
-                                                for lora_key in ['lora_a', 'lora_b']:
-                                                    grad_key = f"{full_path}.{lora_key}"
-                                                    if grad_key in lora_grads_flat:
-                                                        lora_layer_grads[lora_key] = lora_grads_flat[grad_key]
+                                            for lora_key in ['lora_a', 'lora_b']:
+                                                grad_key = f"{full_path}.{lora_key}"
+                                                if grad_key in lora_grads_flat:
+                                                    lora_layer_grads[lora_key] = lora_grads_flat[grad_key]
                                             if lora_layer_grads:
                                                 nested_grads[key] = lora_layer_grads
                                         else:
