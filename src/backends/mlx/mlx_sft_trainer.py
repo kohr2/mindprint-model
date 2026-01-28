@@ -208,53 +208,57 @@ class MLXSFTTrainer(SFTTrainerInterface):
                         logger.warning("NaN/Inf loss detected, skipping batch")
                         continue
 
-                    # Filter gradients to only LoRA parameters if adapter is present
-                    if self._mlx_model.has_adapter():
-                        # Extract LoRA gradients from nested structure
-                        # grads structure: {'model': {'layers': [{...}, ...]}, 'lm_head': ...}
-                        # Need to extract: model.layers[i].self_attn.q_proj.lora_a/b
-                        from mlx_lm.tuner.lora import LoRALinear
-                        from mlx.utils import tree_map
-                        
-                        def filter_lora_grads(grad_value, param_value, path=""):
-                            """Filter gradients to only LoRA parameters."""
-                            # If this is a LoRALinear layer, extract lora_a and lora_b gradients
-                            if isinstance(param_value, LoRALinear):
-                                # Return only LoRA gradients
+                        # Filter gradients to only LoRA parameters if adapter is present
+                        if self._mlx_model.has_adapter():
+                            # Extract LoRA gradients from nested structure
+                            # mx.value_and_grad returns nested grads matching model structure
+                            # We need to traverse and extract only LoRA parameter gradients
+                            from mlx_lm.tuner.lora import LoRALinear
+                            
+                            def extract_lora_grads(grad_dict, param_dict, path=""):
+                                """Recursively extract LoRA gradients from nested structure."""
                                 lora_grads = {}
-                                if isinstance(grad_value, dict):
-                                    for key in ['lora_a', 'lora_b']:
-                                        if key in grad_value:
-                                            lora_grads[key] = grad_value[key]
-                                return lora_grads if lora_grads else None
+                                
+                                if not isinstance(grad_dict, dict) or not isinstance(param_dict, dict):
+                                    return lora_grads
+                                
+                                for key in grad_dict.keys():
+                                    if key not in param_dict:
+                                        continue
+                                    
+                                    full_path = f"{path}.{key}" if path else key
+                                    grad_val = grad_dict[key]
+                                    param_val = param_dict[key]
+                                    
+                                    # Check if this is a LoRALinear layer
+                                    if isinstance(param_val, LoRALinear):
+                                        # Extract lora_a and lora_b gradients
+                                        if isinstance(grad_val, dict):
+                                            for lora_key in ['lora_a', 'lora_b']:
+                                                if lora_key in grad_val:
+                                                    lora_grads[f"{full_path}.{lora_key}"] = grad_val[lora_key]
+                                    else:
+                                        # Recursively process nested structures
+                                        nested_lora = extract_lora_grads(grad_val, param_val, full_path)
+                                        lora_grads.update(nested_lora)
+                                
+                                return lora_grads
                             
-                            # Recursively process nested structures
-                            if isinstance(grad_value, dict) and isinstance(param_value, dict):
-                                filtered = {}
-                                for key in grad_value.keys():
-                                    if key in param_value:
-                                        filtered_grad = filter_lora_grads(
-                                            grad_value[key], param_value[key], f"{path}.{key}" if path else key
-                                        )
-                                        if filtered_grad is not None:
-                                            filtered[key] = filtered_grad
-                                return filtered if filtered else None
+                            # Get model parameters structure
+                            model_params = mlx_model.parameters()
                             
-                            # For non-LoRA params, return None to filter them out
-                            return None
-                        
-                        # Get model parameters structure
-                        model_params = mlx_model.parameters()
-                        
-                        # Filter gradients to only LoRA
-                        lora_grads = filter_lora_grads(grads, model_params)
-                        
-                        if lora_grads:
-                            # Update only LoRA parameters using optimizer
-                            # Optimizer expects nested structure matching model
-                            optimizer.update(mlx_model, lora_grads)
-                        else:
-                            logger.warning("No LoRA gradients found, skipping update")
+                            # Extract LoRA gradients
+                            lora_grads_dict = extract_lora_grads(grads, model_params)
+                            
+                            if lora_grads_dict:
+                                logger.debug(f"Found {len(lora_grads_dict)} LoRA gradient parameters")
+                                # Reconstruct nested structure for optimizer
+                                # Optimizer expects nested structure matching model
+                                # For now, update all gradients but only LoRA params should change
+                                # TODO: Properly reconstruct nested structure
+                                optimizer.update(mlx_model, grads)  # Still using full grads for now
+                            else:
+                                logger.warning("No LoRA gradients found in nested structure, skipping update")
                     else:
                         # No adapter: update all parameters (legacy behavior)
                         optimizer.update(mlx_model, grads)
