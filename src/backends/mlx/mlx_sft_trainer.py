@@ -252,11 +252,47 @@ class MLXSFTTrainer(SFTTrainerInterface):
                             
                             if lora_grads_dict:
                                 logger.debug(f"Found {len(lora_grads_dict)} LoRA gradient parameters")
-                                # Reconstruct nested structure for optimizer
-                                # Optimizer expects nested structure matching model
-                                # For now, update all gradients but only LoRA params should change
-                                # TODO: Properly reconstruct nested structure
-                                optimizer.update(mlx_model, grads)  # Still using full grads for now
+                                # Reconstruct nested structure matching model for optimizer
+                                # Create a gradient dict with only LoRA params, zeros for others
+                                def reconstruct_nested_lora_grads(param_dict, lora_grads_flat, path=""):
+                                    """Reconstruct nested gradient structure with only LoRA gradients."""
+                                    nested_grads = {}
+                                    
+                                    if not isinstance(param_dict, dict):
+                                        return None
+                                    
+                                    for key in param_dict.keys():
+                                        full_path = f"{path}.{key}" if path else key
+                                        param_val = param_dict[key]
+                                        
+                                        from mlx_lm.tuner.lora import LoRALinear
+                                        
+                                        if isinstance(param_val, LoRALinear):
+                                            # This is a LoRA layer, extract its gradients
+                                            lora_layer_grads = {}
+                                            if isinstance(param_val, dict):
+                                                for lora_key in ['lora_a', 'lora_b']:
+                                                    grad_key = f"{full_path}.{lora_key}"
+                                                    if grad_key in lora_grads_flat:
+                                                        lora_layer_grads[lora_key] = lora_grads_flat[grad_key]
+                                            if lora_layer_grads:
+                                                nested_grads[key] = lora_layer_grads
+                                        else:
+                                            # Recursively process nested structures
+                                            nested = reconstruct_nested_lora_grads(param_val, lora_grads_flat, full_path)
+                                            if nested:
+                                                nested_grads[key] = nested
+                                    
+                                    return nested_grads if nested_grads else None
+                                
+                                # Reconstruct nested structure
+                                nested_lora_grads = reconstruct_nested_lora_grads(model_params, lora_grads_dict)
+                                
+                                if nested_lora_grads:
+                                    # Update only LoRA parameters
+                                    optimizer.update(mlx_model, nested_lora_grads)
+                                else:
+                                    logger.warning("Could not reconstruct nested LoRA gradient structure")
                             else:
                                 logger.warning("No LoRA gradients found in nested structure, skipping update")
                     else:
