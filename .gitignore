@@ -1,0 +1,77 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.env
+.env.local
+.venv
+env/
+venv/
+ENV/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+.cursor/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Project specific
+data/bob_loukas/*.jsonl
+data/bob_loukas/*.json
+!data/bob_loukas/.gitkeep
+eval_results/
+!eval_results/.gitkeep
+checkpoints/
+logs/
+output/
+*.log
+
+# Model files (large)
+*.bin
+*.safetensors
+*.gguf
+*.pt
+models/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build outputs
+.next/
+node_modules/
