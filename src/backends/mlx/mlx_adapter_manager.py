@@ -197,9 +197,37 @@ class MLXAdapterManager(AdapterManager):
             
             lora_param_count = count_lora_params(mlx_model)
 
+            # Count LoRA parameters by recursively traversing the model
+            def count_lora_params(module, depth=0):
+                """Recursively count LoRA parameters."""
+                if depth > 20:
+                    return 0
+                count = 0
+                # Check if this module has items() (MLX dict-like interface)
+                if hasattr(module, 'items'):
+                    try:
+                        for name, child in module.items():
+                            # Check if this is a LoRALinear module
+                            if hasattr(child, '__class__') and 'LoRALinear' in str(type(child)):
+                                # LoRALinear has lora_a and lora_b parameters
+                                if hasattr(child, 'parameters'):
+                                    child_params = child.parameters()
+                                    # Count lora_a and lora_b
+                                    for param_name in child_params.keys():
+                                        if 'lora' in param_name.lower():
+                                            count += 1
+                            # Recurse into nested modules
+                            elif isinstance(child, nn.Module) or hasattr(child, 'items'):
+                                count += count_lora_params(child, depth + 1)
+                    except Exception:
+                        pass
+                return count
+            
+            lora_param_count = count_lora_params(mlx_model)
+            
             logger.info(
                 f"Added LoRA adapter '{adapter_name}' "
-                f"({lora_param_count} LoRA parameter groups)"
+                f"({lora_param_count} LoRA parameter groups, {converted_count} layers converted)"
             )
             return model
 
