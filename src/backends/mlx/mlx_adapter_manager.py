@@ -163,6 +163,38 @@ class MLXAdapterManager(AdapterManager):
             if converted_count == 0:
                 logger.warning("No linear layers were converted to LoRA. Check target_modules configuration.")
 
+            # Freeze base model parameters and ensure LoRA parameters are trainable
+            # This is critical for trainable_parameters() to work correctly
+            try:
+                # Freeze the entire model first
+                mlx_model.freeze()
+                
+                # Then unfreeze LoRA parameters
+                def unfreeze_lora(module, depth=0):
+                    """Recursively unfreeze LoRA parameters."""
+                    if depth > 20:
+                        return
+                    if hasattr(module, 'items'):
+                        try:
+                            for name, child in module.items():
+                                if isinstance(child, _LoRALinear):
+                                    # Unfreeze this LoRA layer
+                                    child.unfreeze()
+                                elif isinstance(child, nn.Module) or hasattr(child, 'items'):
+                                    unfreeze_lora(child, depth + 1)
+                        except Exception:
+                            pass
+                
+                # Unfreeze LoRA parameters starting from base model
+                if hasattr(mlx_model, 'model'):
+                    unfreeze_lora(mlx_model.model)
+                else:
+                    unfreeze_lora(mlx_model)
+                
+                logger.debug("Frozen base model parameters, unfrozen LoRA parameters")
+            except Exception as e:
+                logger.warning(f"Could not freeze/unfreeze parameters: {e}")
+
             # Mark that adapter is added
             model._has_adapter = True
 
