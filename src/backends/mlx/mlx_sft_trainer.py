@@ -198,30 +198,21 @@ class MLXSFTTrainer(SFTTrainerInterface):
                         return loss
 
                     # Compute loss and gradients
-                    loss, grads = mx.value_and_grad(loss_fn)(
-                        mlx_model, input_ids, labels
-                    )
+                    # Use nn.value_and_grad which automatically handles trainable parameters
+                    # This computes gradients only for trainable params (LoRA when adapter present)
+                    import mlx.nn as nn
+                    loss_value_and_grad = nn.value_and_grad(mlx_model, loss_fn)
+                    (loss, toks), grads = loss_value_and_grad(mlx_model, input_ids, labels)
 
                     # Skip if loss is NaN
                     if mx.isnan(loss).item() or mx.isinf(loss).item():
                         logger.warning("NaN/Inf loss detected, skipping batch")
                         continue
 
-                    # Filter gradients to only LoRA parameters if adapter is present
-                    if self._mlx_model.has_adapter():
-                        lora_grads = {}
-                        for name, grad in grads.items():
-                            if 'lora' in name.lower():
-                                lora_grads[name] = grad
-                        
-                        if lora_grads:
-                            # Update only LoRA parameters
-                            optimizer.update(mlx_model, lora_grads)
-                        else:
-                            logger.warning("No LoRA gradients found, skipping update")
-                    else:
-                        # No adapter: update all parameters (legacy behavior)
-                        optimizer.update(mlx_model, grads)
+                    # nn.value_and_grad already filters to trainable parameters
+                    # When LoRA adapter is present, only LoRA params are trainable
+                    # So grads already contains only LoRA gradients
+                    optimizer.update(mlx_model, grads)
 
                     # Force evaluation (MLX is lazy)
                     mx.eval(mlx_model.parameters())
