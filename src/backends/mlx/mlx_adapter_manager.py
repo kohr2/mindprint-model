@@ -48,6 +48,9 @@ class MLXAdapterManager(AdapterManager):
         try:
             from mlx_lm.tuner.lora import LoRALinear
             import mlx.nn as nn
+            
+            # Import at module level for isinstance checks
+            _LoRALinear = LoRALinear
 
             # Get underlying MLX model
             mlx_model = model.get_underlying_model()
@@ -208,25 +211,14 @@ class MLXAdapterManager(AdapterManager):
                     try:
                         for name, child in module.items():
                             # Check if this is a LoRALinear module
-                            # Use isinstance check with imported LoRALinear
-                            try:
-                                from mlx_lm.tuner.lora import LoRALinear
-                                if isinstance(child, LoRALinear):
-                                    # LoRALinear has lora_a and lora_b parameters
-                                    if hasattr(child, 'parameters'):
-                                        child_params = child.parameters()
-                                        # Count lora_a and lora_b
-                                        for param_name in child_params.keys():
-                                            if 'lora' in param_name.lower():
-                                                count += 1
-                            except ImportError:
-                                # Fallback: check type name
-                                if hasattr(child, '__class__') and 'LoRALinear' in str(type(child)):
-                                    if hasattr(child, 'parameters'):
-                                        child_params = child.parameters()
-                                        for param_name in child_params.keys():
-                                            if 'lora' in param_name.lower():
-                                                count += 1
+                            if isinstance(child, _LoRALinear):
+                                # LoRALinear has lora_a and lora_b parameters
+                                if hasattr(child, 'parameters'):
+                                    child_params = child.parameters()
+                                    # Count lora_a and lora_b
+                                    for param_name in child_params.keys():
+                                        if 'lora' in param_name.lower():
+                                            count += 1
                             # Recurse into nested modules
                             if isinstance(child, nn.Module) or hasattr(child, 'items'):
                                 count += count_lora_params(child, depth + 1)
