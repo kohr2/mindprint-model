@@ -198,7 +198,7 @@ class MLXSFTTrainer(SFTTrainerInterface):
                         return loss
 
                     # Compute loss and gradients
-                    # Use mx.value_and_grad to get all gradients, then manually update LoRA params
+                    # Use mx.value_and_grad to get all gradients (nested structure)
                     loss, grads = mx.value_and_grad(loss_fn)(
                         mlx_model, input_ids, labels
                     )
@@ -210,66 +210,51 @@ class MLXSFTTrainer(SFTTrainerInterface):
 
                     # Filter gradients to only LoRA parameters if adapter is present
                     if self._mlx_model.has_adapter():
-                        # Manually extract and update LoRA parameters from nested structure
-                        # mx.value_and_grad returns nested grads: grads['model']['layers'][i]['self_attn']['q_proj']['lora_a']
+                        # Extract LoRA gradients from nested structure
+                        # grads structure: {'model': {'layers': [{...}, ...]}, 'lm_head': ...}
+                        # Need to extract: model.layers[i].self_attn.q_proj.lora_a/b
                         from mlx_lm.tuner.lora import LoRALinear
+                        from mlx.utils import tree_map
                         
-                        def update_lora_params(module, grads_dict, prefix=""):
-                            """Recursively update LoRA parameters with gradients."""
-                            updated_count = 0
+                        def filter_lora_grads(grad_value, param_value, path=""):
+                            """Filter gradients to only LoRA parameters."""
+                            # If this is a LoRALinear layer, extract lora_a and lora_b gradients
+                            if isinstance(param_value, LoRALinear):
+                                # Return only LoRA gradients
+                                lora_grads = {}
+                                if isinstance(grad_value, dict):
+                                    for key in ['lora_a', 'lora_b']:
+                                        if key in grad_value:
+                                            lora_grads[key] = grad_value[key]
+                                return lora_grads if lora_grads else None
                             
-                            if hasattr(module, 'items'):
-                                for name, child in module.items():
-                                    full_name = f"{prefix}.{name}" if prefix else name
-                                    
-                                    if isinstance(child, LoRALinear):
-                                        # Get LoRA parameters from this layer
-                                        lora_params = child.trainable_parameters()
-                                        for pname, param in lora_params.items():
-                                            if 'lora' in pname.lower():
-                                                # Try to find gradient in nested structure
-                                                # grads['model']['layers'][i]['self_attn']['q_proj']['lora_a']
-                                                grad_path = full_name.split('.')
-                                                grad_value = grads_dict
-                                                
-                                                try:
-                                                    # Navigate to gradient
-                                                    for part in grad_path:
-                                                        if isinstance(grad_value, dict):
-                                                            grad_value = grad_value.get(part)
-                                                        else:
-                                                            grad_value = None
-                                                            break
-                                                    
-                                                    if grad_value is not None and isinstance(grad_value, dict):
-                                                        grad_value = grad_value.get(pname)
-                                                    
-                                                    if grad_value is not None:
-                                                        # Update parameter directly
-                                                        # Use optimizer's update logic for this param
-                                                        param_grad = grad_value
-                                                        # Apply learning rate and update
-                                                        if hasattr(optimizer, 'learning_rate'):
-                                                            lr = optimizer.learning_rate
-                                                        else:
-                                                            lr = learning_rate
-                                                        
-                                                        # Simple SGD update for LoRA params
-                                                        param[:] = param - lr * param_grad
-                                                        updated_count += 1
-                                                except Exception as e:
-                                                    logger.debug(f"Could not update {full_name}.{pname}: {e}")
-                                    
-                                    elif isinstance(child, nn.Module) or hasattr(child, 'items'):
-                                        updated_count += update_lora_params(child, grads_dict, full_name)
+                            # Recursively process nested structures
+                            if isinstance(grad_value, dict) and isinstance(param_value, dict):
+                                filtered = {}
+                                for key in grad_value.keys():
+                                    if key in param_value:
+                                        filtered_grad = filter_lora_grads(
+                                            grad_value[key], param_value[key], f"{path}.{key}" if path else key
+                                        )
+                                        if filtered_grad is not None:
+                                            filtered[key] = filtered_grad
+                                return filtered if filtered else None
                             
-                            return updated_count
+                            # For non-LoRA params, return None to filter them out
+                            return None
                         
-                        # Update LoRA parameters directly
-                        updated = update_lora_params(mlx_model.model if hasattr(mlx_model, 'model') else mlx_model, grads)
+                        # Get model parameters structure
+                        model_params = mlx_model.parameters()
                         
-                        if updated == 0:
-                            logger.warning("No LoRA parameters were updated")
+                        # Filter gradients to only LoRA
+                        lora_grads = filter_lora_grads(grads, model_params)
+                        
+                        if lora_grads:
+                            # Update only LoRA parameters using optimizer
+                            # Optimizer expects nested structure matching model
+                            optimizer.update(mlx_model, lora_grads)
+                        else:
+                            logger.warning("No LoRA gradients found, skipping update")
                     else:
                         # No adapter: update all parameters (legacy behavior)
                         optimizer.update(mlx_model, grads)
