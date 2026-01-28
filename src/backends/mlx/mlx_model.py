@@ -313,14 +313,39 @@ class MLXModel(ModelInterface):
         """Get number of trainable parameters."""
         if self._has_adapter:
             # Count only LoRA parameters when adapter is present
+            # Need to recursively traverse model to find LoRA parameters
             try:
+                import mlx.nn as nn
                 total = 0
-                params_dict = self._model.parameters()
-                for name, param in params_dict.items():
-                    if 'lora' in name.lower():
-                        total += param.size
+                
+                def count_lora_params(module, depth=0):
+                    """Recursively count LoRA parameter sizes."""
+                    if depth > 20:
+                        return 0
+                    count = 0
+                    # Check if this module has items() (MLX dict-like interface)
+                    if hasattr(module, 'items'):
+                        try:
+                            for name, child in module.items():
+                                # Check if this is a LoRALinear module
+                                if hasattr(child, '__class__') and 'LoRALinear' in str(type(child)):
+                                    # LoRALinear has lora_a and lora_b parameters
+                                    if hasattr(child, 'parameters'):
+                                        child_params = child.parameters()
+                                        for param_name, param in child_params.items():
+                                            if 'lora' in param_name.lower():
+                                                count += param.size
+                                # Recurse into nested modules
+                                elif isinstance(child, nn.Module) or hasattr(child, 'items'):
+                                    count += count_lora_params(child, depth + 1)
+                        except Exception:
+                            pass
+                    return count
+                
+                total = count_lora_params(self._model)
                 return total
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Error counting LoRA parameters: {e}")
                 return 0
         # No adapter: return total parameters (legacy behavior)
         return self.num_parameters

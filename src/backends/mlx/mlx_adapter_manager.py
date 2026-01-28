@@ -163,15 +163,39 @@ class MLXAdapterManager(AdapterManager):
             # Mark that adapter is added
             model._has_adapter = True
 
-            # Count LoRA parameters
-            lora_param_count = 0
-            try:
-                params_dict = mlx_model.parameters()
-                for name, param in params_dict.items():
-                    if 'lora' in name.lower():
-                        lora_param_count += 1
-            except Exception:
-                pass
+            # Count LoRA parameters recursively
+            # LoRA parameters are nested inside layers, so we need to traverse the model
+            def count_lora_params(module, depth=0):
+                """Recursively count LoRA parameters."""
+                if depth > 20:
+                    return 0
+                count = 0
+                # Check if this module has parameters
+                if hasattr(module, 'parameters'):
+                    try:
+                        params = module.parameters()
+                        if isinstance(params, dict):
+                            for name, param in params.items():
+                                if 'lora' in name.lower():
+                                    count += 1
+                                # Recursively check nested modules
+                                if hasattr(param, 'parameters') or (isinstance(param, nn.Module) and hasattr(param, 'items')):
+                                    count += count_lora_params(param, depth + 1)
+                    except Exception:
+                        pass
+                # Also check via items() for MLX modules
+                if hasattr(module, 'items'):
+                    try:
+                        for name, child in module.items():
+                            if isinstance(child, (list, tuple, str, int, float, bool)):
+                                continue
+                            if hasattr(child, 'parameters') or isinstance(child, nn.Module):
+                                count += count_lora_params(child, depth + 1)
+                    except Exception:
+                        pass
+                return count
+            
+            lora_param_count = count_lora_params(mlx_model)
 
             logger.info(
                 f"Added LoRA adapter '{adapter_name}' "
