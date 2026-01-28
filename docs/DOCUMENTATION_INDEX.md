@@ -45,6 +45,7 @@ Complete index of mindprint-model documentation organized by topic.
 
 ### Test Scripts
 
+- **Remote Diagnostic Test**: `scripts/run_test_on_mac_studio.sh` - Run MLX diagnostic test remotely via SSH
 - **Diagnostic Test**: `tests/debug/test_mlx_training_state.py` - MLX training state verification
 - **Single Topic Test**: `scripts/test_single_topic_mlx.sh` - Quick validation
 - **Monitoring**: `scripts/monitor_training.sh` - Training progress monitoring
@@ -131,6 +132,7 @@ Historical planning documents (archived):
 
 | Task | Documentation | Command |
 |------|---------------|---------|
+| Run diagnostic test | [MLX Testing](mlx/MLX_REAL_WORLD_TESTING.md) | `./scripts/run_test_on_mac_studio.sh <host> <user>` |
 | Train with MLX | [MLX Testing](mlx/MLX_REAL_WORLD_TESTING.md) | `python scripts/run_dpo_training.py --backend mlx` |
 | Train with PyTorch | [README](../README.md) | `python scripts/run_dpo_training.py --backend pytorch` |
 | Troubleshoot MLX | [Troubleshooting](mlx/MLX_BACKEND_TROUBLESHOOTING.md) | `python tests/debug/test_mlx_training_state.py` |

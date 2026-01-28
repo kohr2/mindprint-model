@@ -60,7 +60,32 @@ If you see 7+ billion trainable parameters, you need to update to the fixed vers
 
 ## Quick Start
 
-### 1. Verify Configuration (Dry-Run)
+### 1. Run Diagnostic Test (Recommended First Step)
+
+Before running training, verify MLX LoRA training is working correctly:
+
+```bash
+# From local machine (with SSH access to Mac Studio)
+cd ~/mindprint-model
+MAC_STUDIO_PASSWORD="your_password" ./scripts/run_test_on_mac_studio.sh memeticas-mac-studio memetica-studio
+```
+
+Or manually via SSH:
+```bash
+# On Mac Studio
+cd ~/mindprint-model
+python3 tests/debug/test_mlx_training_state.py
+```
+
+This diagnostic test verifies:
+- LoRA adapters are properly attached
+- Only LoRA parameters are trainable
+- Training doesn't corrupt base model
+- Generation quality is maintained
+
+**Expected output**: LoRA parameters found (100+ groups), voice score > 0.10 after training
+
+### 2. Verify Configuration (Dry-Run)
 
 Before running actual training, verify the configuration:
 
@@ -81,7 +106,7 @@ python3 scripts/run_dpo_training.py \
 
 Expected output: Configuration details without errors.
 
-### 2. Single-Topic Test
+### 3. Single-Topic Test
 
 Test on a single topic first to validate the MLX backend:
 

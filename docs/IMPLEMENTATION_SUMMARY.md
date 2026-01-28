@@ -315,6 +315,11 @@ All commits pushed to both `shared` and `dpo` branches.
 - `docs/mlx/MLX_LORA_TRAINING_ISSUE.md` - Complete investigation timeline
 - `docs/mlx/MLX_BACKEND_TROUBLESHOOTING.md` - Troubleshooting guide
 - `docs/mlx/MLX_LORA_ARCHITECTURE.md` - Technical architecture
+- `docs/mlx/MLX_REAL_WORLD_TESTING.md` - Testing guide for Mac Studio
+
+**Testing Tools**:
+- `scripts/run_test_on_mac_studio.sh` - Remote diagnostic test script (Jan 28, 2026)
+- `tests/debug/test_mlx_training_state.py` - Comprehensive diagnostic test
 
 **Status**: ✅ Fixed and ready for testing
 
