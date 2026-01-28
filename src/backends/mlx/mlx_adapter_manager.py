@@ -101,8 +101,9 @@ class MLXAdapterManager(AdapterManager):
                         if should_convert:
                             logger.info(f"Converting {full_name} to LoRA")
                             try:
-                                # Convert to LoRA layer
-                                lora_layer = LoRALinear.from_linear(
+                                # Convert to LoRA layer using from_base
+                                # from_base takes the base Linear layer and LoRA config
+                                lora_layer = LoRALinear.from_base(
                                     child,
                                     r=mlx_config['rank'],
                                     scale=mlx_config['scale'],
@@ -135,14 +136,23 @@ class MLXAdapterManager(AdapterManager):
                 return converted_count
 
             # Convert model layers
-            # MLX models typically have: model.layers[i].attention/q_proj, etc.
+            # MLX models typically have: model.model.layers[i].self_attn.q_proj, etc.
             converted_count = 0
             if hasattr(mlx_model, 'model'):
                 # Qwen/Llama-style models have a 'model' attribute containing layers
-                converted_count = convert_to_lora(mlx_model.model)
+                # Traverse: model -> model.model -> model.model.layers -> layer.self_attn -> q_proj
+                base_model = mlx_model.model
+                if hasattr(base_model, 'layers'):
+                    # Process each layer in the transformer
+                    for i, layer in enumerate(base_model.layers):
+                        converted_count += convert_to_lora(layer, f"layers.{i}", depth=0)
+                else:
+                    # Fallback: try converting the whole model
+                    converted_count = convert_to_lora(base_model)
             elif hasattr(mlx_model, 'layers'):
                 # Direct layers attribute
-                converted_count = convert_to_lora(mlx_model)
+                for i, layer in enumerate(mlx_model.layers):
+                    converted_count += convert_to_lora(layer, f"layers.{i}", depth=0)
             else:
                 # Try direct conversion
                 converted_count = convert_to_lora(mlx_model)
