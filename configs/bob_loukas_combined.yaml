@@ -1,14 +1,14 @@
 # Training Pipeline Configuration
-# Bob Loukas Mindprint - Mac Studio M2 Ultra (64GB)
-# Combined SFT + DPO training with evaluation
+# Bob Loukas Mindprint - Combined Dataset (Textbook + Transcripts)
+# Mac Studio M2 Ultra (64GB)
 
-# Backend configuration (optional - defaults to legacy mode if not specified)
+# Backend configuration
 backend:
-  type: mlx  # "pytorch" or "mlx" (set to null for legacy mode)
+  type: mlx  # "pytorch" or "mlx"
   device: auto  # "auto", "mps", "cuda", "cpu", "gpu"
   dtype: float16  # "float16", "float32", "bfloat16"
 
-# Model (used for legacy mode or backend initialization)
+# Model
 model:
   name: Qwen/Qwen2.5-7B-Instruct
   dtype: float16
@@ -42,22 +42,22 @@ dpo:
 
 # Thresholds
 thresholds:
-  accuracy_threshold: 0.70  # Trigger DPO if SFT accuracy below this
-  dpo_trigger_threshold: 0.70  # Trigger DPO if voice score below this
-  topic_pass_threshold: 0.70  # Topic passes if score above this
+  accuracy_threshold: 0.70
+  dpo_trigger_threshold: 0.70
+  topic_pass_threshold: 0.70
 
 # Pipeline control
 pipeline:
   merge_after_unit: true
   max_retries_per_topic: 2
 
-# Paths
+# Paths - Combined dataset
 paths:
-  data_dir: ./data/bob_loukas
+  data_dir: ./data/bob_loukas/combined
   output_dir: ./output
-  checkpoint_dir: ./checkpoints
+  checkpoint_dir: ./checkpoints/combined
 
 # Logging
 logging:
   level: INFO
-  log_file: ./logs/training.log
+  log_file: ./logs/combined_training.log

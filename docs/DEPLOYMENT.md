@@ -203,8 +203,8 @@ pipeline = DPOPipeline(
 
 ```python
 # Load curriculum data
-sft_data = load_sft_data("./data/bob_loukas/sft_data.json")
-preference_data = load_preference_pairs("./data/bob_loukas/preference_pairs.json")
+sft_data = load_sft_data("./data/bob_loukas/textbook/sft_data.jsonl")
+preference_data = load_preference_pairs("./data/bob_loukas/textbook/preference_data.jsonl")
 
 # Train
 result = pipeline.train_curriculum(

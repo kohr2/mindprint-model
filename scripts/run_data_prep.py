@@ -53,8 +53,18 @@ Examples:
 
     parser.add_argument(
         "--textbook",
-        default="../omnia/projects/bob_loukas/textbook",
-        help="Path to Bob Loukas textbook directory (default: ../omnia/projects/bob_loukas/textbook)",
+        default=None,
+        help="Path to Bob Loukas textbook directory (required for textbook or combined mode)",
+    )
+    parser.add_argument(
+        "--transcript-dir",
+        default=None,
+        help="Path to transcripts directory (required for transcript or combined mode)",
+    )
+    parser.add_argument(
+        "--summaries-dir",
+        default=None,
+        help="Path to episode summaries directory (optional, from mindprint-agent)",
     )
     parser.add_argument(
         "--output",
@@ -62,10 +72,28 @@ Examples:
         help="Output directory for generated data (default: ./data/bob_loukas)",
     )
     parser.add_argument(
+        "--mode",
+        choices=["textbook", "transcripts", "combined"],
+        default="textbook",
+        help="Data preparation mode (default: textbook)",
+    )
+    parser.add_argument(
+        "--textbook-ratio",
+        type=float,
+        default=0.6,
+        help="Ratio of textbook data when combining (default: 0.6 = 60%% textbook, 40%% transcripts)",
+    )
+    parser.add_argument(
         "--target-questions",
         type=int,
         default=10,
         help="Target number of questions per topic (default: 10)",
+    )
+    parser.add_argument(
+        "--target-episode-questions",
+        type=int,
+        default=15,
+        help="Target number of questions per episode (default: 15)",
     )
     parser.add_argument(
         "--no-augment",
@@ -102,67 +130,103 @@ def main():
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
-    # Validate paths
-    textbook_path = Path(args.textbook)
-    if not textbook_path.exists():
-        logger.error(f"Textbook directory not found: {textbook_path}")
-        logger.error("Make sure the path to the Bob Loukas textbook is correct.")
-        return 1
+    # Validate paths based on mode
+    use_textbook = args.mode in ["textbook", "combined"]
+    use_transcripts = args.mode in ["transcripts", "combined"]
 
-    curriculum_path = textbook_path / "curriculum.yaml"
-    if not curriculum_path.exists():
-        logger.error(f"curriculum.yaml not found in {textbook_path}")
-        return 1
+    textbook_path = None
+    if use_textbook:
+        if not args.textbook:
+            logger.error("--textbook required for textbook or combined mode")
+            return 1
+        textbook_path = Path(args.textbook)
+        if not textbook_path.exists():
+            logger.error(f"Textbook directory not found: {textbook_path}")
+            return 1
+        curriculum_path = textbook_path / "curriculum.yaml"
+        if not curriculum_path.exists():
+            logger.error(f"curriculum.yaml not found in {textbook_path}")
+            return 1
+
+    transcript_dir = None
+    if use_transcripts:
+        if not args.transcript_dir:
+            logger.error("--transcript-dir required for transcripts or combined mode")
+            return 1
+        transcript_dir = args.transcript_dir
+        transcript_path = Path(transcript_dir)
+        if not transcript_path.exists():
+            logger.error(f"Transcript directory not found: {transcript_path}")
+            return 1
 
     # Show configuration
     print("\n" + "=" * 60)
     print("DATA PREPARATION CONFIGURATION")
     print("=" * 60)
-    print(f"Textbook path:     {textbook_path.absolute()}")
+    print(f"Mode:              {args.mode}")
+    if textbook_path:
+        print(f"Textbook path:     {textbook_path.absolute()}")
+    if transcript_dir:
+        print(f"Transcript dir:    {Path(transcript_dir).absolute()}")
     print(f"Output path:       {Path(args.output).absolute()}")
     print(f"Target questions:  {args.target_questions}")
+    print(f"Target episodes:   {args.target_episode_questions}")
     print(f"Augment questions: {not args.no_augment}")
     print(f"Critical pairs:    {not args.no_critical}")
+    if args.mode == "combined":
+        print(f"Textbook ratio:    {args.textbook_ratio}")
     print(f"Dry run:           {args.dry_run}")
     print("=" * 60 + "\n")
 
     # Dry run - just show statistics
     if args.dry_run:
-        from src.data_prep.textbook_parser import TextbookParser
+        if use_textbook:
+            from src.data_prep.textbook_parser import TextbookParser
+            parser = TextbookParser(str(textbook_path))
+            stats = parser.get_statistics()
 
-        parser = TextbookParser(str(textbook_path))
-        stats = parser.get_statistics()
+            print("TEXTBOOK STATISTICS")
+            print("-" * 40)
+            print(f"Topics:               {stats['topics']}")
+            print(f"Chapters:             {stats['chapters']}")
+            print(f"Units:                {stats['units']}")
+            print(f"Topic questions:      {stats['topic_questions']}")
+            print(f"Chapter questions:    {stats['chapter_questions']}")
+            print(f"Unit questions:       {stats['unit_questions']}")
+            print(f"Total questions:      {stats['total_questions']}")
+            print(f"Avg per topic:        {stats['avg_questions_per_topic']:.1f}")
+            print("-" * 40)
 
-        print("TEXTBOOK STATISTICS")
-        print("-" * 40)
-        print(f"Topics:               {stats['topics']}")
-        print(f"Chapters:             {stats['chapters']}")
-        print(f"Units:                {stats['units']}")
-        print(f"Topic questions:      {stats['topic_questions']}")
-        print(f"Chapter questions:    {stats['chapter_questions']}")
-        print(f"Unit questions:       {stats['unit_questions']}")
-        print(f"Total questions:      {stats['total_questions']}")
-        print(f"Avg per topic:        {stats['avg_questions_per_topic']:.1f}")
-        print("-" * 40)
-
-        if stats['avg_questions_per_topic'] < args.target_questions:
-            questions_needed = int(
-                (args.target_questions - stats['avg_questions_per_topic']) * stats['topics']
+        if use_transcripts:
+            from src.data_prep.transcript_processor import TranscriptProcessor
+            processor = TranscriptProcessor(
+                transcripts_dir=transcript_dir,
+                summaries_dir=args.summaries_dir,
             )
-            print(f"\nNote: ~{questions_needed} questions need to be generated")
-            print("to reach the target of {args.target_questions} per topic.")
+            raw_dir = Path(transcript_dir) / "raw"
+            transcript_files = list(raw_dir.glob("*.txt")) if raw_dir.exists() else []
+            print(f"\nTRANSCRIPT STATISTICS")
+            print("-" * 40)
+            print(f"Transcript files:     {len(transcript_files)}")
+            print("-" * 40)
 
         return 0
 
     # Run the pipeline
     try:
         config = PipelineConfig(
-            textbook_path=str(textbook_path),
+            textbook_path=str(textbook_path) if textbook_path else None,
             output_path=args.output,
+            transcript_dir=transcript_dir,
+            summaries_dir=args.summaries_dir,
+            use_transcripts=use_transcripts,
+            combine_with_textbook=args.mode == "combined",
             target_questions_per_topic=args.target_questions,
+            target_questions_per_episode=args.target_episode_questions,
             augment_questions=not args.no_augment,
             include_critical_distinctions=not args.no_critical,
             api_key=args.api_key,
+            textbook_ratio=args.textbook_ratio,
         )
 
         pipeline = DataPipeline(config)

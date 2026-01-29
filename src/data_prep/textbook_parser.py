@@ -27,6 +27,7 @@ class Question:
     key_concepts: List[str] = field(default_factory=list)
     options: Optional[List[str]] = None  # For multiple choice
     correct_option: Optional[str] = None  # For multiple choice
+    source: str = ""  # Source identifier (e.g., "episode-2026-01-24" or "unit-01/chapter-01/topic-01")
 
 
 @dataclass

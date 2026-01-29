@@ -103,13 +103,15 @@ class PreferencePairGenerator:
             PreferencePair with chosen (original) and rejected (stripped) responses
         """
         chosen = question.reference_answer
-        rejected = self._create_rejected_response(question.question, chosen)
+        # Get source from question if available, otherwise use provided source
+        question_source = question.source or source
+        rejected = self._create_rejected_response(question.question, chosen, question_source)
 
         return PreferencePair(
             prompt=question.question,
             chosen=chosen,
             rejected=rejected,
-            source=source,
+            source=question_source,
         )
 
     def generate_all(
@@ -134,7 +136,7 @@ class PreferencePairGenerator:
 
         return pairs
 
-    def _create_rejected_response(self, question: str, reference: str) -> str:
+    def _create_rejected_response(self, question: str, reference: str, source: str = "") -> str:
         """
         Create a rejected response by stripping voice markers and truncating.
 
@@ -142,8 +144,16 @@ class PreferencePairGenerator:
         1. Factually similar but missing Bob's voice
         2. Shorter and less complete
         3. More generic in tone
+
+        Args:
+            question: The question being answered
+            reference: The reference (chosen) answer
+            source: Source identifier (e.g., "episode-2026-01-24" for transcripts)
         """
         rejected = reference
+
+        # Check if this is from a transcript (episode source)
+        is_transcript = source.startswith("episode-")
 
         # Step 1: Remove confidence markers
         for marker in self.config.confidence_markers:
@@ -159,15 +169,19 @@ class PreferencePairGenerator:
         # Step 4: Remove emphasis markers (italics)
         rejected = re.sub(r"\*([^*]+)\*", r"\1", rejected)
 
-        # Step 5: Clean up extra whitespace
+        # Step 5: Transcript-specific rejection strategies
+        if is_transcript:
+            rejected = self._apply_transcript_rejection_strategies(rejected)
+
+        # Step 6: Clean up extra whitespace
         rejected = re.sub(r"\n\s*\n\s*\n", "\n\n", rejected)
         rejected = re.sub(r"  +", " ", rejected)
         rejected = re.sub(r"^\s+", "", rejected, flags=re.MULTILINE)
 
-        # Step 6: Truncate to make it incomplete
+        # Step 7: Truncate to make it incomplete
         rejected = self._truncate_response(rejected)
 
-        # Step 7: Make it more generic by removing specific insights
+        # Step 8: Make it more generic by removing specific insights
         rejected = self._genericize_response(rejected)
 
         # Clean up any remaining issues
@@ -179,6 +193,50 @@ class PreferencePairGenerator:
             rejected = self._force_generic(rejected)
 
         return rejected
+
+    def _apply_transcript_rejection_strategies(self, text: str) -> str:
+        """
+        Apply transcript-specific rejection strategies.
+
+        For transcripts, we want to reject responses that:
+        1. Are overly formal (Bob speaks casually)
+        2. Missing terminology (DCL, right-translated, Bressert bands)
+        3. Generic advice instead of specific insights
+        4. Missing time context (episode date references)
+        """
+        # Remove Bob-specific terminology
+        terminology_patterns = [
+            (r"\bDCL\b", "cycle low"),
+            (r"\bright-translated\b", "bullish"),
+            (r"\bleft-translated\b", "bearish"),
+            (r"\bBressert bands?\b", "technical indicators"),
+            (r"\b40-week low\b", "support level"),
+            (r"\b4-year cycle\b", "market cycle"),
+        ]
+
+        for pattern, replacement in terminology_patterns:
+            text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+
+        # Remove date references (time context)
+        text = re.sub(r"\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}\b", "", text)
+        text = re.sub(r"\b\d{4}-\d{2}-\d{2}\b", "", text)
+
+        # Make it more formal/academic (opposite of Bob's casual tone)
+        text = re.sub(r"\bLook,\s*", "It should be noted that ", text, flags=re.IGNORECASE)
+        text = re.sub(r"\bOkay,?\s+so\b", "Therefore, ", text, flags=re.IGNORECASE)
+        text = re.sub(r"\bHere's the thing\b", "The key point is", text, flags=re.IGNORECASE)
+
+        # Replace specific insights with generic platitudes
+        generic_replacements = [
+            (r"I've tracked this for (over )?\d+ years", "Historical analysis suggests"),
+            (r"In my experience", "Generally speaking"),
+            (r"What I've found", "Research indicates"),
+        ]
+
+        for pattern, replacement in generic_replacements:
+            text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+
+        return text
 
     def _truncate_response(self, text: str) -> str:
         """Truncate the response to a fraction of the original."""

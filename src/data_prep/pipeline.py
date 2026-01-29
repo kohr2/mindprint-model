@@ -10,12 +10,15 @@ from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 import json
 import logging
+import random
 from datetime import datetime
 
 from .textbook_parser import TextbookParser, Question, TopicQuiz, ChapterTest, UnitExam
 from .question_generator import QuestionGenerator, GenerationConfig
 from .preference_generator import PreferencePairGenerator, PreferencePair
 from .critical_distinctions import CriticalDistinctions
+from .transcript_processor import TranscriptProcessor
+from .transcript_question_generator import TranscriptQuestionGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -24,12 +27,18 @@ logger = logging.getLogger(__name__)
 class PipelineConfig:
     """Configuration for the data pipeline."""
 
-    textbook_path: str
-    output_path: str
+    textbook_path: Optional[str] = None
+    output_path: str = ""
+    transcript_dir: Optional[str] = None
+    summaries_dir: Optional[str] = None  # Episode summaries from mindprint-agent
+    use_transcripts: bool = False
+    combine_with_textbook: bool = False
     target_questions_per_topic: int = 10
+    target_questions_per_episode: int = 15
     augment_questions: bool = True
     include_critical_distinctions: bool = True
     api_key: Optional[str] = None  # For question generation
+    textbook_ratio: float = 0.6  # Ratio of textbook data when combining (0.6 = 60% textbook, 40% transcripts)
 
 
 @dataclass
@@ -62,20 +71,38 @@ class DataPipeline:
         self.output_path = Path(config.output_path)
         self.output_path.mkdir(parents=True, exist_ok=True)
 
-        # Initialize components
-        self.parser = TextbookParser(config.textbook_path)
+        # Initialize textbook components (if using textbook)
+        self.parser = None
+        self.question_gen = None
+        if config.textbook_path:
+            self.parser = TextbookParser(config.textbook_path)
+            if config.augment_questions:
+                gen_config = GenerationConfig(
+                    target_questions=config.target_questions_per_topic
+                )
+                self.question_gen = QuestionGenerator(
+                    parser=self.parser,
+                    config=gen_config,
+                    api_key=config.api_key,
+                )
 
-        if config.augment_questions:
-            gen_config = GenerationConfig(
-                target_questions=config.target_questions_per_topic
+        # Initialize transcript components (if using transcripts)
+        self.transcript_processor = None
+        self.transcript_question_gen = None
+        if config.use_transcripts and config.transcript_dir:
+            self.transcript_processor = TranscriptProcessor(
+                transcripts_dir=config.transcript_dir,
+                summaries_dir=config.summaries_dir,
             )
-            self.question_gen = QuestionGenerator(
-                parser=self.parser,
-                config=gen_config,
-                api_key=config.api_key,
-            )
-        else:
-            self.question_gen = None
+            if config.augment_questions:
+                gen_config = GenerationConfig(
+                    target_questions=config.target_questions_per_episode
+                )
+                self.transcript_question_gen = TranscriptQuestionGenerator(
+                    processor=self.transcript_processor,
+                    config=gen_config,
+                    api_key=config.api_key,
+                )
 
         self.preference_gen = PreferencePairGenerator()
         self.critical_distinctions = CriticalDistinctions()
@@ -90,67 +117,128 @@ class DataPipeline:
             Statistics from the pipeline run
         """
         logger.info("Starting data preparation pipeline")
-        logger.info(f"Textbook path: {self.config.textbook_path}")
         logger.info(f"Output path: {self.output_path}")
 
-        # Phase 1: Parse all test files
-        logger.info("Phase 1: Parsing test files")
-        topic_quizzes = self.parser.parse_all_topics()
-        chapter_tests = self.parser.parse_all_chapters()
-        unit_exams = self.parser.parse_all_units()
+        # Determine data sources
+        use_textbook = self.config.textbook_path is not None
+        use_transcripts = self.config.use_transcripts and self.config.transcript_dir is not None
+        combine = self.config.combine_with_textbook and use_textbook and use_transcripts
 
-        self.stats.topics_processed = len(topic_quizzes)
-        self.stats.chapters_processed = len(chapter_tests)
-        self.stats.units_processed = len(unit_exams)
-        self.stats.total_questions_before = sum(
-            len(q.questions) for q in topic_quizzes
-        )
+        if combine:
+            logger.info("Mode: Combined (textbook + transcripts)")
+        elif use_transcripts and not use_textbook:
+            logger.info("Mode: Transcripts only")
+        elif use_textbook and not use_transcripts:
+            logger.info("Mode: Textbook only")
+        else:
+            raise ValueError("Must specify either textbook_path or use_transcripts=True")
 
-        logger.info(f"Parsed {len(topic_quizzes)} topics, {len(chapter_tests)} chapters, {len(unit_exams)} units")
-        logger.info(f"Total topic questions: {self.stats.total_questions_before}")
+        # Phase 1: Process textbook data (if applicable)
+        topic_quizzes = []
+        chapter_tests = []
+        unit_exams = []
+        textbook_sft_data = []
+        textbook_preference_pairs = []
 
-        # Phase 2: Augment questions (if enabled)
-        if self.config.augment_questions and self.question_gen:
-            logger.info("Phase 2: Augmenting questions to target count")
-            topic_quizzes = self.question_gen.augment_all(topic_quizzes)
+        if use_textbook:
+            logger.info("Phase 1: Processing textbook data")
+            logger.info(f"Textbook path: {self.config.textbook_path}")
+            topic_quizzes = self.parser.parse_all_topics()
+            chapter_tests = self.parser.parse_all_chapters()
+            unit_exams = self.parser.parse_all_units()
 
-            self.stats.total_questions_after = sum(
+            self.stats.topics_processed = len(topic_quizzes)
+            self.stats.chapters_processed = len(chapter_tests)
+            self.stats.units_processed = len(unit_exams)
+            self.stats.total_questions_before = sum(
                 len(q.questions) for q in topic_quizzes
             )
-            self.stats.questions_generated = (
-                self.stats.total_questions_after - self.stats.total_questions_before
+
+            logger.info(f"Parsed {len(topic_quizzes)} topics, {len(chapter_tests)} chapters, {len(unit_exams)} units")
+
+            # Augment textbook questions
+            if self.config.augment_questions and self.question_gen:
+                logger.info("Augmenting textbook questions")
+                topic_quizzes = self.question_gen.augment_all(topic_quizzes)
+                self.stats.total_questions_after = sum(
+                    len(q.questions) for q in topic_quizzes
+                )
+                self.stats.questions_generated = (
+                    self.stats.total_questions_after - self.stats.total_questions_before
+                )
+            else:
+                self.stats.total_questions_after = self.stats.total_questions_before
+
+            # Generate textbook SFT and preference data
+            textbook_sft_data = self._create_sft_data(topic_quizzes, chapter_tests, unit_exams)
+            textbook_preference_pairs = self._create_preference_pairs(
+                topic_quizzes, chapter_tests, unit_exams
             )
-            logger.info(f"Generated {self.stats.questions_generated} new questions")
+
+        # Phase 2: Process transcript data (if applicable)
+        transcript_questions = []
+        transcript_sft_data = []
+        transcript_preference_pairs = []
+
+        if use_transcripts:
+            logger.info("Phase 2: Processing transcript data")
+            logger.info(f"Transcript dir: {self.config.transcript_dir}")
+
+            # Process all transcripts
+            transcript_questions = self.transcript_processor.process_all_transcripts()
+
+            # Generate questions if augmentation enabled
+            if self.config.augment_questions and self.transcript_question_gen:
+                logger.info("Generating questions from transcripts")
+                # This would require refactoring to process episode by episode
+                # For now, use the basic questions from processor
+                pass
+
+            # Create SFT data from transcript questions
+            for question in transcript_questions:
+                source = question.source or 'transcript'
+                transcript_sft_data.append({
+                    "instruction": question.question,
+                    "input": "",
+                    "output": question.reference_answer,
+                    "source": source,
+                })
+
+            # Create preference pairs
+            transcript_preference_pairs = self.preference_gen.generate_all(
+                [(q, q.source or 'transcript') for q in transcript_questions]
+            )
+
+            logger.info(f"Generated {len(transcript_sft_data)} transcript SFT examples")
+            logger.info(f"Generated {len(transcript_preference_pairs)} transcript preference pairs")
+
+        # Phase 3: Combine datasets (if requested)
+        if combine:
+            logger.info("Phase 3: Combining datasets")
+            sft_data = self._combine_sft_data(
+                textbook_sft_data, transcript_sft_data, self.config.textbook_ratio
+            )
+            preference_pairs = textbook_preference_pairs + transcript_preference_pairs
+        elif use_transcripts:
+            sft_data = transcript_sft_data
+            preference_pairs = transcript_preference_pairs
         else:
-            logger.info("Phase 2: Skipping question augmentation")
-            self.stats.total_questions_after = self.stats.total_questions_before
+            sft_data = textbook_sft_data
+            preference_pairs = textbook_preference_pairs
 
-        # Phase 3: Generate SFT data
-        logger.info("Phase 3: Generating SFT training data")
-        sft_data = self._create_sft_data(topic_quizzes, chapter_tests, unit_exams)
         self.stats.sft_examples = len(sft_data)
-        logger.info(f"Generated {len(sft_data)} SFT examples")
-
-        # Phase 4: Generate preference pairs
-        logger.info("Phase 4: Generating preference pairs")
-        preference_pairs = self._create_preference_pairs(
-            topic_quizzes, chapter_tests, unit_exams
-        )
         self.stats.preference_pairs = len(preference_pairs)
-        logger.info(f"Generated {len(preference_pairs)} preference pairs")
 
-        # Phase 5: Add critical distinctions
+        # Phase 4: Add critical distinctions
         if self.config.include_critical_distinctions:
-            logger.info("Phase 5: Adding critical distinction pairs")
+            logger.info("Phase 4: Adding critical distinction pairs")
             critical_pairs = self.critical_distinctions.get_all_pairs()
             self.stats.critical_pairs = len(critical_pairs)
             preference_pairs.extend(critical_pairs)
             logger.info(f"Added {len(critical_pairs)} critical distinction pairs")
-        else:
-            logger.info("Phase 5: Skipping critical distinctions")
 
-        # Phase 6: Save all outputs
-        logger.info("Phase 6: Saving outputs")
+        # Phase 5: Save all outputs
+        logger.info("Phase 5: Saving outputs")
         self._save_all(
             sft_data=sft_data,
             preference_pairs=preference_pairs,
@@ -163,6 +251,49 @@ class DataPipeline:
         self._print_summary()
 
         return self.stats
+
+    def _combine_sft_data(
+        self,
+        textbook_data: List[Dict],
+        transcript_data: List[Dict],
+        textbook_ratio: float,
+    ) -> List[Dict]:
+        """
+        Combine textbook and transcript SFT data with specified ratio.
+
+        Args:
+            textbook_data: Textbook SFT examples
+            transcript_data: Transcript SFT examples
+            textbook_ratio: Ratio of textbook data (0.6 = 60% textbook, 40% transcripts)
+
+        Returns:
+            Combined SFT data
+        """
+        total = len(textbook_data) + len(transcript_data)
+        if total == 0:
+            return []
+
+        # Calculate target counts
+        target_textbook = int(total * textbook_ratio)
+        target_transcript = total - target_textbook
+
+        # Sample to achieve ratio
+        import random
+        combined = []
+
+        # Add textbook data (up to target)
+        textbook_sample = textbook_data[:target_textbook] if len(textbook_data) >= target_textbook else textbook_data
+        combined.extend(textbook_sample)
+
+        # Add transcript data (up to target)
+        transcript_sample = transcript_data[:target_transcript] if len(transcript_data) >= target_transcript else transcript_data
+        combined.extend(transcript_sample)
+
+        # Shuffle to mix sources
+        random.shuffle(combined)
+
+        logger.info(f"Combined {len(textbook_sample)} textbook + {len(transcript_sample)} transcript = {len(combined)} total examples")
+        return combined
 
     def _create_sft_data(
         self,

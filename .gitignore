@@ -51,8 +51,8 @@ htmlcov/
 dmypy.json
 
 # Project specific
-data/bob_loukas/*.jsonl
-data/bob_loukas/*.json
+data/bob_loukas/**/*.jsonl
+data/bob_loukas/**/*.json
 !data/bob_loukas/.gitkeep
 eval_results/
 !eval_results/.gitkeep
