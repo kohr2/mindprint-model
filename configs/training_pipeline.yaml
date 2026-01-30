@@ -51,9 +51,9 @@ pipeline:
   merge_after_unit: true
   max_retries_per_topic: 2
 
-# Paths
+# Paths - Using transcripts dataset
 paths:
-  data_dir: ./data/bob_loukas
+  data_dir: ./data/bob_loukas/transcripts
   output_dir: ./output
   checkpoint_dir: ./checkpoints
 
