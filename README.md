@@ -300,23 +300,97 @@ pytest tests/integration/ -v
 pytest tests/integration/test_backend_equivalence.py --run-slow
 ```
 
-### Real-World Testing on Mac Studio
+### Mac Studio Training Workflow
 
-For testing the MLX backend on Mac Studio:
+The recommended workflow uses git to sync code between your development machine and Mac Studio:
+
+**One-Time Setup on Mac Studio:**
 
 ```bash
-# Verify configuration (dry-run)
-./scripts/test_dry_run.sh
+# SSH to Mac Studio
+ssh memetica-studio@100.87.103.70
 
-# Test single topic
-./scripts/test_single_topic_mlx.sh unit-01 chapter-01 topic-01
+# Clone the repository
+cd ~/Documents/Memetica/Code
+git clone https://github.com/kohr2/mindprint-model
+cd mindprint-model
 
-# Monitor training
-./scripts/monitor_training.sh
-
-# Deploy from local machine
-./scripts/train_on_mac_studio.sh mac-studio.local user
+# Install dependencies
+pip3 install -r requirements.txt
+pip3 install mlx mlx-lm
 ```
+
+**Normal Workflow:**
+
+1. **On your development machine** (MacBook Air):
+   ```bash
+   # Make changes, commit and push
+   git add .
+   git commit -m "Update training config"
+   git push origin main
+   ```
+
+2. **On Mac Studio**:
+   ```bash
+   # SSH to Mac Studio
+   ssh memetica-studio@100.87.103.70
+   cd ~/mindprint-model
+   
+   # Pull latest code and start training
+   ./scripts/local_train.sh
+   
+   # Monitor training (in another terminal)
+   ./scripts/local_monitor.sh
+   
+   # Or follow logs live
+   ./scripts/local_monitor.sh --follow
+   ```
+
+**Optional: Quick Deploy Script**
+
+If you don't want to SSH manually, you can use the convenience script from your development machine:
+
+```bash
+# On MacBook Air
+source .env.local
+./scripts/quick_deploy.sh
+```
+
+This will SSH to Mac Studio and run `local_train.sh` automatically.
+
+**Post-Training Tasks:**
+
+After training completes, run analysis and evaluation directly on Mac Studio:
+
+```bash
+# Run post-training pipeline (merge + evaluate + export)
+python3 scripts/run_post_training.py \
+    --base-model Qwen/Qwen2.5-7B-Instruct \
+    --adapter output/transcripts_*/adapters/... \
+    --quiz-data data/bob_loukas/transcripts \
+    --output output/merged_model
+
+# Run evaluation
+python3 scripts/run_evaluation.py \
+    --model Qwen/Qwen2.5-7B-Instruct \
+    --adapter output/merged_model/merged \
+    --quiz-data data/bob_loukas/transcripts \
+    --output eval_results
+
+# Run analysis
+python3 scripts/analyze_training_results.py \
+    --checkpoint checkpoints/latest.json \
+    --log logs/training_*.log \
+    --output analysis
+```
+
+**Benefits of Git-Based Workflow:**
+
+- ✅ Simpler: No complex SSH/rsync scripts
+- ✅ Version controlled: All changes tracked in git
+- ✅ Standard workflow: Uses git pull/push everyone understands
+- ✅ Flexible: Easy to run commands directly on Mac Studio
+- ✅ No file syncing: Git handles code synchronization
 
 See [MLX Real-World Testing Guide](docs/MLX_REAL_WORLD_TESTING.md) for detailed instructions.
 
