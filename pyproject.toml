@@ -43,9 +43,22 @@ dependencies = [
 dev = [
     "pytest>=8.0.0",
     "pytest-cov>=4.1.0",
+    "pytest-benchmark>=4.0.0",
+    "hypothesis>=6.0.0",
     "black>=24.0.0",
     "ruff>=0.3.0",
     "mypy>=1.9.0",
+    "mkdocs>=1.5.0",
+    "mkdocs-material>=9.0.0",
+    "mkdocstrings[python]>=0.24.0",
+]
+mlx = [
+    "mlx>=0.19.0",
+    "mlx-lm>=0.19.0",
+]
+tracking = [
+    "wandb>=0.16.0",
+    "mlflow>=2.10.0",
 ]
 
 [project.scripts]

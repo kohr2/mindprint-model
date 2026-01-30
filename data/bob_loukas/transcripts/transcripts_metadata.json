@@ -1,0 +1,902 @@
+[
+  {
+    "filename": "2019-02-19T14-28-05Z.txt",
+    "date": null,
+    "box_id": "1968529312465",
+    "box_name": "2019-02-19T14-28-05Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "skipped"
+  },
+  {
+    "filename": "2019-02-19T14-28-05Z_F.txt",
+    "date": null,
+    "box_id": "1868086024490",
+    "box_name": "2019-02-19T14-28-05Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "skipped"
+  },
+  {
+    "filename": "2019-02-21T18-01-15Z.txt",
+    "date": null,
+    "box_id": "1868035230355",
+    "box_name": "2019-02-21T18-01-15Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "skipped"
+  },
+  {
+    "filename": "2019-03-04T14-47-43Z.txt",
+    "date": null,
+    "box_id": "1968525016035",
+    "box_name": "2019-03-04T14-47-43Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "skipped"
+  },
+  {
+    "filename": "2019-03-04T14-47-43Z_F.txt",
+    "date": null,
+    "box_id": "1868063363782",
+    "box_name": "2019-03-04T14-47-43Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "skipped"
+  },
+  {
+    "filename": "2019-03-06T13-34-17Z.txt",
+    "date": null,
+    "box_id": "1868075195284",
+    "box_name": "2019-03-06T13-34-17Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-03-08T15-04-16Z.txt",
+    "date": null,
+    "box_id": "1968532238355",
+    "box_name": "2019-03-08T15-04-16Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-03-08T15-04-16Z_F.txt",
+    "date": null,
+    "box_id": "1868070285279",
+    "box_name": "2019-03-08T15-04-16Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-03-13T20-28-23Z.txt",
+    "date": null,
+    "box_id": "1868061332806",
+    "box_name": "2019-03-13T20-28-23Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-03-20T22-17-47Z.txt",
+    "date": null,
+    "box_id": "1968534400040",
+    "box_name": "2019-03-20T22-17-47Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-03-20T22-17-47Z_F.txt",
+    "date": null,
+    "box_id": "1867991569353",
+    "box_name": "2019-03-20T22-17-47Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-03-27T12-55-11Z.txt",
+    "date": null,
+    "box_id": "1968516767708",
+    "box_name": "2019-03-27T12-55-11Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-03-27T12-55-11Z_F.txt",
+    "date": null,
+    "box_id": "1868062784900",
+    "box_name": "2019-03-27T12-55-11Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-03-28T12-13-30Z.txt",
+    "date": null,
+    "box_id": "1968531995445",
+    "box_name": "2019-03-28T12-13-30Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-03-28T12-13-30Z_F.txt",
+    "date": null,
+    "box_id": "1867991540905",
+    "box_name": "2019-03-28T12-13-30Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-03-29T13-04-46Z.txt",
+    "date": null,
+    "box_id": "1868000461583",
+    "box_name": "2019-03-29T13-04-46Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-04-01T12-35-59Z.txt",
+    "date": null,
+    "box_id": "1868000480980",
+    "box_name": "2019-04-01T12-35-59Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-04-02T12-15-56Z.txt",
+    "date": null,
+    "box_id": "1868009378362",
+    "box_name": "2019-04-02T12-15-56Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-04-02T15-48-14Z.txt",
+    "date": null,
+    "box_id": "1968531847063",
+    "box_name": "2019-04-02T15-48-14Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-04-02T15-48-14Z_F.txt",
+    "date": null,
+    "box_id": "1868091523006",
+    "box_name": "2019-04-02T15-48-14Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-04-03T14-01-42Z.txt",
+    "date": null,
+    "box_id": "1868001601457",
+    "box_name": "2019-04-03T14-01-42Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-04-04T12-17-31Z.txt",
+    "date": null,
+    "box_id": "1867983349460",
+    "box_name": "2019-04-04T12-17-31Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-04-05T15-07-26Z.txt",
+    "date": null,
+    "box_id": "1968532545555",
+    "box_name": "2019-04-05T15-07-26Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-04-05T15-07-26Z_F.txt",
+    "date": null,
+    "box_id": "1868015915175",
+    "box_name": "2019-04-05T15-07-26Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-04-08T15-03-37Z.txt",
+    "date": null,
+    "box_id": "1868025568577",
+    "box_name": "2019-04-08T15-03-37Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-04-10T12-57-00Z.txt",
+    "date": null,
+    "box_id": "1968532782906",
+    "box_name": "2019-04-10T12-57-00Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-04-10T12-57-00Z_F.txt",
+    "date": null,
+    "box_id": "1868088887019",
+    "box_name": "2019-04-10T12-57-00Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-04-10T19-15-49Z.txt",
+    "date": null,
+    "box_id": "1868098727501",
+    "box_name": "2019-04-10T19-15-49Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-04-12T13-41-20Z.txt",
+    "date": null,
+    "box_id": "1968520427375",
+    "box_name": "2019-04-12T13-41-20Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-04-12T13-41-20Z_F.txt",
+    "date": null,
+    "box_id": "1868079378171",
+    "box_name": "2019-04-12T13-41-20Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-04-17T15-03-59Z.txt",
+    "date": null,
+    "box_id": "1868008136802",
+    "box_name": "2019-04-17T15-03-59Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-04-22T13-48-21Z.txt",
+    "date": null,
+    "box_id": "1868097107555",
+    "box_name": "2019-04-22T13-48-21Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-04-24T13-46-43Z.txt",
+    "date": null,
+    "box_id": "1968519150849",
+    "box_name": "2019-04-24T13-46-43Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-04-24T13-46-43Z_F.txt",
+    "date": null,
+    "box_id": "1867975569018",
+    "box_name": "2019-04-24T13-46-43Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-04-24T19-39-27Z.txt",
+    "date": null,
+    "box_id": "1968533324872",
+    "box_name": "2019-04-24T19-39-27Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-04-24T19-39-27Z_F.txt",
+    "date": null,
+    "box_id": "1868008096110",
+    "box_name": "2019-04-24T19-39-27Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-04-26T13-33-34Z.txt",
+    "date": null,
+    "box_id": "1968530199935",
+    "box_name": "2019-04-26T13-33-34Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-04-26T13-33-34Z_F.txt",
+    "date": null,
+    "box_id": "1868005777951",
+    "box_name": "2019-04-26T13-33-34Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-04-29T13-35-35Z.txt",
+    "date": null,
+    "box_id": "1968524759400",
+    "box_name": "2019-04-29T13-35-35Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-04-29T13-35-35Z_F.txt",
+    "date": null,
+    "box_id": "1868091129220",
+    "box_name": "2019-04-29T13-35-35Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-05-02T13-31-55Z.txt",
+    "date": null,
+    "box_id": "1868070219780",
+    "box_name": "2019-05-02T13-31-55Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-05-03T13-45-33Z.txt",
+    "date": null,
+    "box_id": "1968526076483",
+    "box_name": "2019-05-03T13-45-33Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-05-03T13-45-33Z_F.txt",
+    "date": null,
+    "box_id": "1868073277370",
+    "box_name": "2019-05-03T13-45-33Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-05-06T14-43-58Z.txt",
+    "date": null,
+    "box_id": "1868095816783",
+    "box_name": "2019-05-06T14-43-58Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-05-08T13-13-38Z.txt",
+    "date": null,
+    "box_id": "1867998604732",
+    "box_name": "2019-05-08T13-13-38Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-05-08T22-00-57Z.txt",
+    "date": null,
+    "box_id": "1868010275013",
+    "box_name": "2019-05-08T22-00-57Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-05-10T12-54-07Z.txt",
+    "date": null,
+    "box_id": "1968530488015",
+    "box_name": "2019-05-10T12-54-07Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-05-10T12-54-07Z_F.txt",
+    "date": null,
+    "box_id": "1868012666065",
+    "box_name": "2019-05-10T12-54-07Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-05-12T15-52-45Z.txt",
+    "date": null,
+    "box_id": "1867996070103",
+    "box_name": "2019-05-12T15-52-45Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-05-16T13-18-11Z.txt",
+    "date": null,
+    "box_id": "1968520549367",
+    "box_name": "2019-05-16T13-18-11Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-05-16T13-18-11Z_F.txt",
+    "date": null,
+    "box_id": "1868050156473",
+    "box_name": "2019-05-16T13-18-11Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-05-17T13-13-07Z.txt",
+    "date": null,
+    "box_id": "1968534008944",
+    "box_name": "2019-05-17T13-13-07Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-05-17T13-13-07Z_F.txt",
+    "date": null,
+    "box_id": "1868040777305",
+    "box_name": "2019-05-17T13-13-07Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-05-20T13-57-59Z.txt",
+    "date": null,
+    "box_id": "1868045387700",
+    "box_name": "2019-05-20T13-57-59Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-05-23T14-37-00Z.txt",
+    "date": null,
+    "box_id": "1868028899482",
+    "box_name": "2019-05-23T14-37-00Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-05-23T14-42-03Z.txt",
+    "date": null,
+    "box_id": "1968520857532",
+    "box_name": "2019-05-23T14-42-03Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-05-23T14-42-03Z_F.txt",
+    "date": null,
+    "box_id": "1868085839378",
+    "box_name": "2019-05-23T14-42-03Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-05-24T14-28-59Z.txt",
+    "date": null,
+    "box_id": "1968520849465",
+    "box_name": "2019-05-24T14-28-59Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-05-24T14-28-59Z_F.txt",
+    "date": null,
+    "box_id": "1867984079641",
+    "box_name": "2019-05-24T14-28-59Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-05-24T19-58-19Z.txt",
+    "date": null,
+    "box_id": "1868074034319",
+    "box_name": "2019-05-24T19-58-19Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-05-28T12-35-09Z.txt",
+    "date": null,
+    "box_id": "1868020463475",
+    "box_name": "2019-05-28T12-35-09Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-05-30T12-29-20Z.txt",
+    "date": null,
+    "box_id": "1968520904665",
+    "box_name": "2019-05-30T12-29-20Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-05-30T12-29-20Z_F.txt",
+    "date": null,
+    "box_id": "1868058330054",
+    "box_name": "2019-05-30T12-29-20Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-05-30T15-16-36Z.txt",
+    "date": null,
+    "box_id": "1968520986575",
+    "box_name": "2019-05-30T15-16-36Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-05-30T15-16-36Z_F.txt",
+    "date": null,
+    "box_id": "1868093322621",
+    "box_name": "2019-05-30T15-16-36Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-05-31T12-02-56Z.txt",
+    "date": null,
+    "box_id": "1868087713631",
+    "box_name": "2019-05-31T12-02-56Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-06-04T19-33-47Z.txt",
+    "date": null,
+    "box_id": "1968519716792",
+    "box_name": "2019-06-04T19-33-47Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-06-04T19-33-47Z_F.txt",
+    "date": null,
+    "box_id": "1868080295271",
+    "box_name": "2019-06-04T19-33-47Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-06-05T12-36-19Z.txt",
+    "date": null,
+    "box_id": "1968533547654",
+    "box_name": "2019-06-05T12-36-19Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-06-05T12-36-19Z_F.txt",
+    "date": null,
+    "box_id": "1868052602023",
+    "box_name": "2019-06-05T12-36-19Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-06-06T12-58-30Z.txt",
+    "date": null,
+    "box_id": "1968525971157",
+    "box_name": "2019-06-06T12-58-30Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-06-06T12-58-30Z_F.txt",
+    "date": null,
+    "box_id": "1868014566747",
+    "box_name": "2019-06-06T12-58-30Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-06-08T18-14-27Z.txt",
+    "date": null,
+    "box_id": "1867990710199",
+    "box_name": "2019-06-08T18-14-27Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-06-10T13-30-46Z.txt",
+    "date": null,
+    "box_id": "1968531100695",
+    "box_name": "2019-06-10T13-30-46Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-06-10T13-30-46Z_F.txt",
+    "date": null,
+    "box_id": "1868012631983",
+    "box_name": "2019-06-10T13-30-46Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-06-12T13-48-27Z.txt",
+    "date": null,
+    "box_id": "1968523051053",
+    "box_name": "2019-06-12T13-48-27Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-06-12T13-48-27Z_F.txt",
+    "date": null,
+    "box_id": "1868079344756",
+    "box_name": "2019-06-12T13-48-27Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-06-12T15-04-04Z.txt",
+    "date": null,
+    "box_id": "1968525445800",
+    "box_name": "2019-06-12T15-04-04Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-06-12T15-04-04Z_F.txt",
+    "date": null,
+    "box_id": "1868066992198",
+    "box_name": "2019-06-12T15-04-04Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-06-14T14-19-50Z.txt",
+    "date": null,
+    "box_id": "1868026821154",
+    "box_name": "2019-06-14T14-19-50Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-06-16T18-08-18Z.txt",
+    "date": null,
+    "box_id": "1968526933234",
+    "box_name": "2019-06-16T18-08-18Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-06-16T18-08-18Z_F.txt",
+    "date": null,
+    "box_id": "1868051816660",
+    "box_name": "2019-06-16T18-08-18Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-06-17T13-13-47Z.txt",
+    "date": null,
+    "box_id": "1868080633204",
+    "box_name": "2019-06-17T13-13-47Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-06-19T12-19-57Z.txt",
+    "date": null,
+    "box_id": "1867986956474",
+    "box_name": "2019-06-19T12-19-57Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-06-20T12-05-05Z.txt",
+    "date": null,
+    "box_id": "1968535151520",
+    "box_name": "2019-06-20T12-05-05Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-06-20T12-05-05Z_F.txt",
+    "date": null,
+    "box_id": "1867989052757",
+    "box_name": "2019-06-20T12-05-05Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-06-21T15-09-56Z.txt",
+    "date": null,
+    "box_id": "1968520672214",
+    "box_name": "2019-06-21T15-09-56Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-06-21T15-09-56Z_F.txt",
+    "date": null,
+    "box_id": "1868053276572",
+    "box_name": "2019-06-21T15-09-56Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-06-22T18-25-09Z.txt",
+    "date": null,
+    "box_id": "1968521183612",
+    "box_name": "2019-06-22T18-25-09Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-06-22T18-25-09Z_F.txt",
+    "date": null,
+    "box_id": "1868022421744",
+    "box_name": "2019-06-22T18-25-09Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-06-24T13-07-20Z.txt",
+    "date": null,
+    "box_id": "1968534993035",
+    "box_name": "2019-06-24T13-07-20Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-06-24T13-07-20Z_F.txt",
+    "date": null,
+    "box_id": "1868022116562",
+    "box_name": "2019-06-24T13-07-20Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-06-26T13-52-13Z.txt",
+    "date": null,
+    "box_id": "1868095470895",
+    "box_name": "2019-06-26T13-52-13Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-06-30T22-20-33Z.txt",
+    "date": null,
+    "box_id": "1968534610886",
+    "box_name": "2019-06-30T22-20-33Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-06-30T22-20-33Z_F.txt",
+    "date": null,
+    "box_id": "1868027444757",
+    "box_name": "2019-06-30T22-20-33Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-07-01T12-56-33Z.txt",
+    "date": null,
+    "box_id": "1968534594989",
+    "box_name": "2019-07-01T12-56-33Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-07-01T12-56-33Z_F.txt",
+    "date": null,
+    "box_id": "1868019978064",
+    "box_name": "2019-07-01T12-56-33Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-07-03T13-03-25Z.txt",
+    "date": null,
+    "box_id": "1868094534641",
+    "box_name": "2019-07-03T13-03-25Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-07-03T23-17-02Z.txt",
+    "date": null,
+    "box_id": "1968526163241",
+    "box_name": "2019-07-03T23-17-02Z.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  },
+  {
+    "filename": "2019-07-03T23-17-02Z_F.txt",
+    "date": null,
+    "box_id": "1868012802394",
+    "box_name": "2019-07-03T23-17-02Z_F.txt",
+    "size": null,
+    "modified_at": "None",
+    "status": "downloaded"
+  }
+]

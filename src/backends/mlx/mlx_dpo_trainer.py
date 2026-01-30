@@ -9,6 +9,7 @@ from typing import List, Dict, Any, Optional
 from pathlib import Path
 import logging
 import time
+import random
 
 from ..trainer_interface import DPOTrainerInterface, TrainingResult
 from ..model_interface import ModelInterface
@@ -202,11 +203,10 @@ class MLXDPOTrainer(DPOTrainerInterface):
             rejected_rewards_sum = 0.0
 
             for step in range(max_steps):
-                # Sample batch
-                batch_indices = mx.random.choice(
-                    len(train_data), size=min(batch_size, len(train_data))
-                )
-                batch = [train_data[int(i)] for i in batch_indices.tolist()]
+                # Sample batch randomly
+                batch_size_actual = min(batch_size, len(train_data))
+                batch_indices = random.sample(range(len(train_data)), batch_size_actual)
+                batch = [train_data[i] for i in batch_indices]
 
                 # Tokenize chosen and rejected responses
                 chosen_texts = [
@@ -236,7 +236,18 @@ class MLXDPOTrainer(DPOTrainerInterface):
                 chosen_ids = mx.array(chosen_encoded["input_ids"])
                 rejected_ids = mx.array(rejected_encoded["input_ids"])
 
-                # Define loss function
+                # Compute reference model log probs first (no gradients needed)
+                # In MLX, gradients are only computed when explicitly requested via value_and_grad
+                ref_chosen_logps = self._compute_log_probs(
+                    ref_model, chosen_ids, chosen_ids
+                )
+                ref_rejected_logps = self._compute_log_probs(
+                    ref_model, rejected_ids, rejected_ids
+                )
+                # Force evaluation of reference model outputs (MLX is lazy)
+                mx.eval(ref_chosen_logps, ref_rejected_logps)
+
+                # Define loss function for policy model (gradients will be computed)
                 def loss_fn(model):
                     # Policy model log probs
                     policy_chosen_logps = self._compute_log_probs(
@@ -245,15 +256,6 @@ class MLXDPOTrainer(DPOTrainerInterface):
                     policy_rejected_logps = self._compute_log_probs(
                         model, rejected_ids, rejected_ids
                     )
-
-                    # Reference model log probs (frozen)
-                    with mx.no_grad():
-                        ref_chosen_logps = self._compute_log_probs(
-                            ref_model, chosen_ids, chosen_ids
-                        )
-                        ref_rejected_logps = self._compute_log_probs(
-                            ref_model, rejected_ids, rejected_ids
-                        )
 
                     # Compute DPO loss
                     loss = self._dpo_loss(
@@ -266,7 +268,7 @@ class MLXDPOTrainer(DPOTrainerInterface):
 
                     return loss
 
-                # Compute loss and gradients
+                # Compute loss and gradients (only for policy model)
                 loss, grads = mx.value_and_grad(loss_fn)(policy_model)
 
                 # Skip if loss is NaN
@@ -390,3 +392,27 @@ class MLXDPOTrainer(DPOTrainerInterface):
         """
         # Return empty dict for now - could be populated during training
         return {}
+
+    def get_reference_model(self) -> ModelInterface:
+        """
+        Get the reference model used for DPO.
+
+        Returns:
+            ModelInterface instance of reference model
+        """
+        if self._mlx_ref_model is None:
+            # If no reference model was provided, return the policy model
+            # (which will be frozen during DPO training)
+            return self._mlx_model
+        return self._mlx_ref_model
+
+    def get_dpo_stats(self) -> Dict[str, Any]:
+        """
+        Get DPO-specific statistics.
+
+        Returns:
+            Dictionary with rewards, accuracies, margins, etc.
+        """
+        # Delegate to get_training_stats for now
+        # This could be enhanced to track actual DPO metrics during training
+        return self.get_training_stats()

@@ -23,7 +23,7 @@ import argparse
 import logging
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 import yaml
 
@@ -68,10 +68,42 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def load_config(config_path: str) -> PipelineConfig:
-    """Load pipeline configuration from YAML file."""
+def extract_dataset_name(config_path: str) -> str:
+    """
+    Extract dataset name from config filename.
+    
+    Examples:
+        "bob_loukas_textbook.yaml" -> "textbook"
+        "bob_loukas_transcripts.yaml" -> "transcripts"
+        "bob_loukas_combined.yaml" -> "combined"
+        "training_pipeline.yaml" -> "default"
+    """
+    config_stem = Path(config_path).stem
+    
+    # Remove common prefix
+    if "bob_loukas_" in config_stem:
+        dataset_name = config_stem.replace("bob_loukas_", "")
+    elif "training_pipeline" in config_stem:
+        dataset_name = "default"
+    else:
+        # Try to extract from filename pattern
+        dataset_name = config_stem
+    
+    return dataset_name
+
+
+def load_config(config_path: str) -> Tuple[PipelineConfig, str]:
+    """
+    Load pipeline configuration from YAML file.
+    
+    Returns:
+        Tuple of (PipelineConfig, dataset_name)
+    """
     with open(config_path) as f:
         config_dict = yaml.safe_load(f)
+
+    # Extract dataset name from config filename
+    dataset_name = extract_dataset_name(config_path)
 
     # Extract backend configuration
     backend_config = config_dict.get("backend", {})
@@ -80,7 +112,7 @@ def load_config(config_path: str) -> PipelineConfig:
     backend_dtype = backend_config.get("dtype", "float16")
 
     # Map YAML structure to PipelineConfig
-    return PipelineConfig(
+    config = PipelineConfig(
         # Backend settings (for new backend system)
         backend_type=backend_type,
         backend_device=backend_device,
@@ -105,7 +137,11 @@ def load_config(config_path: str) -> PipelineConfig:
         data_dir=config_dict.get("paths", {}).get("data_dir", "./data"),
         output_dir=config_dict.get("paths", {}).get("output_dir", "./output"),
         checkpoint_dir=config_dict.get("paths", {}).get("checkpoint_dir", "./checkpoints"),
+        # Store config filename for checkpoint naming
+        config_filename=config_path,
     )
+    
+    return config, dataset_name
 
 
 def load_model_and_tokenizer(
@@ -207,8 +243,9 @@ def main():
 
     # Load configuration
     if Path(args.config).exists():
-        config = load_config(args.config)
+        config, dataset_name = load_config(args.config)
         logger.info(f"Loaded config from: {args.config}")
+        logger.info(f"Dataset: {dataset_name}")
     else:
         config = PipelineConfig()
         logger.warning(f"Config file not found: {args.config}, using defaults")

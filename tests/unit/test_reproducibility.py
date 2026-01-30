@@ -13,7 +13,7 @@ from dataclasses import dataclass
 import random
 import numpy as np
 
-from src.utils.reproducibility import (
+from src.infrastructure.reproducibility import (
     set_seed,
     hash_config,
     get_reproducibility_info,
@@ -165,8 +165,8 @@ class TestGetReproducibilityInfo:
 class TestMPSHandling:
     """Test MPS-specific seed handling."""
 
-    @patch("src.utils.reproducibility.torch.backends.mps.is_available", return_value=True)
-    @patch("src.utils.reproducibility.torch.mps.manual_seed")
+    @patch("src.infrastructure.reproducibility.torch.backends.mps.is_available", return_value=True)
+    @patch("src.infrastructure.reproducibility.torch.mps.manual_seed")
     def test_sets_mps_seed_when_available(
         self,
         mock_mps_seed: MagicMock,
@@ -180,8 +180,8 @@ class TestMPSHandling:
 class TestCUDAHandling:
     """Test CUDA-specific seed handling."""
 
-    @patch("src.utils.reproducibility.torch.cuda.is_available", return_value=True)
-    @patch("src.utils.reproducibility.torch.cuda.manual_seed_all")
+    @patch("src.infrastructure.reproducibility.torch.cuda.is_available", return_value=True)
+    @patch("src.infrastructure.reproducibility.torch.cuda.manual_seed_all")
     def test_sets_cuda_seed_when_available(
         self,
         mock_cuda_seed: MagicMock,

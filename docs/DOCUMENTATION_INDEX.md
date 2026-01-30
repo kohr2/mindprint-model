@@ -18,7 +18,6 @@ Complete index of mindprint-model documentation organized by topic.
 ### Core Documentation
 
 - **[Backend System Overview](../src/backends/README.md)** - Complete backend API documentation
-- **[Implementation Summary](IMPLEMENTATION_SUMMARY.md)** - Backend implementation timeline and details
 - **[Migration Guide](MIGRATION.md)** - Migrating from legacy code to backend system
 - **[Deployment Guide](DEPLOYMENT.md)** - Production deployment instructions
 
@@ -31,8 +30,7 @@ Complete index of mindprint-model documentation organized by topic.
 
 ### Issue Investigation
 
-- **[Adapter Stacking Debug](../ADAPTER_STACKING_DEBUG.md)** - PyTorch MPS adapter corruption investigation
-- **[Prompt Format Fix](PROMPT_FORMAT_FIX.md)** - Qwen2.5 prompt format investigation
+- **PyTorch MPS Adapter Corruption** - Historical issue, resolved by using MLX backend
 
 ---
 
@@ -40,14 +38,12 @@ Complete index of mindprint-model documentation organized by topic.
 
 ### Test Documentation
 
-- **[Testing Ready](TESTING_READY.md)** - Overview of testing infrastructure
 - **[Debug Tests README](../tests/debug/README.md)** - Diagnostic test documentation
+- **[Testing Guide](contributing/testing.md)** - Comprehensive testing guide
 
 ### Test Scripts
 
-- **Remote Diagnostic Test**: `scripts/run_test_on_mac_studio.sh` - Run MLX diagnostic test remotely via SSH
 - **Diagnostic Test**: `tests/debug/test_mlx_training_state.py` - MLX training state verification
-- **Single Topic Test**: `scripts/test_single_topic_mlx.sh` - Quick validation
 - **Monitoring**: `scripts/monitor_training.sh` - Training progress monitoring
 
 ---
@@ -69,18 +65,10 @@ Complete index of mindprint-model documentation organized by topic.
 
 ---
 
-## Planning Documents
+## Evaluation
 
-Historical planning documents (archived):
-
-- **[00-overview.md](planning/00-overview.md)** - Project overview
-- **[01-data-preparation.md](planning/01-data-preparation.md)** - Data preparation
-- **[02-voice-evaluator.md](planning/02-voice-evaluator.md)** - Voice evaluation design
-- **[02b-evaluation-pipeline.md](planning/02b-evaluation-pipeline.md)** - Evaluation pipeline
-- **[03-model-selection.md](planning/03-model-selection.md)** - Model selection criteria
-- **[04-dpo-trainer.md](planning/04-dpo-trainer.md)** - DPO trainer design
-- **[05-dpo-pipeline.md](planning/05-dpo-pipeline.md)** - Pipeline architecture
-- **[06-dpo-training.md](planning/06-dpo-training.md)** - Training procedures
+- **[Transcripts Evaluation Guide](TRANSCRIPTS_EVALUATION.md)** - Complete evaluation guide for transcripts training
+- **[User Guide: Evaluation](user-guide/evaluation.md)** - General evaluation workflow
 
 ---
 
@@ -94,25 +82,20 @@ Historical planning documents (archived):
    - Troubleshooting: `docs/mlx/MLX_BACKEND_TROUBLESHOOTING.md`
    - Test: `tests/debug/test_mlx_training_state.py`
 
-2. **PyTorch MPS Adapter Corruption** (Jan 10, 2026)
-   - Investigation: `ADAPTER_STACKING_DEBUG.md`
+2. **PyTorch MPS Adapter Corruption** (Historical)
    - Solution: Use MLX backend instead
-
-3. **Prompt Format Mismatch** (Jan 28, 2026)
-   - Investigation: `docs/PROMPT_FORMAT_FIX.md`
-   - Solution: Use `tokenizer.apply_chat_template()`
 
 ### Backend Implementation
 
 1. **Architecture**
    - Overview: `src/backends/README.md`
-   - Implementation: `docs/IMPLEMENTATION_SUMMARY.md`
+   - Architecture Guide: `concepts/architecture.md`
    - Migration: `docs/MIGRATION.md`
 
 2. **Deployment**
    - Guide: `docs/DEPLOYMENT.md`
-   - Testing: `docs/MLX_REAL_WORLD_TESTING.md`
-   - Scripts: `scripts/train_on_mac_studio.sh`
+   - Testing: `docs/mlx/MLX_REAL_WORLD_TESTING.md`
+   - Mac Studio Workflow: See README.md
 
 ### Testing and Debugging
 
@@ -132,22 +115,20 @@ Historical planning documents (archived):
 
 | Task | Documentation | Command |
 |------|---------------|---------|
-| Run diagnostic test | [MLX Testing](mlx/MLX_REAL_WORLD_TESTING.md) | `./scripts/run_test_on_mac_studio.sh <host> <user>` |
-| Train with MLX | [MLX Testing](mlx/MLX_REAL_WORLD_TESTING.md) | `python scripts/run_dpo_training.py --backend mlx` |
-| Train with PyTorch | [README](../README.md) | `python scripts/run_dpo_training.py --backend pytorch` |
-| Troubleshoot MLX | [Troubleshooting](mlx/MLX_BACKEND_TROUBLESHOOTING.md) | `python tests/debug/test_mlx_training_state.py` |
-| Verify LoRA | [Architecture](mlx/MLX_LORA_ARCHITECTURE.md) | Check `model.num_trainable_parameters` |
-| Monitor training | [Testing](mlx/MLX_REAL_WORLD_TESTING.md) | `scripts/monitor_training.sh` |
+| Train with MLX | [User Guide](user-guide/training.md) | `python scripts/run_dpo_training.py --backend mlx` |
+| Train with SimPO | [User Guide](user-guide/training.md) | `python scripts/run_dpo_training.py --loss-type simpo` |
+| Evaluate model | [Evaluation Guide](TRANSCRIPTS_EVALUATION.md) | `./scripts/local_evaluate.sh` |
+| Monitor training | [User Guide](user-guide/training.md) | `./scripts/local_monitor.sh` |
+| Troubleshoot MLX | [Troubleshooting](mlx/MLX_BACKEND_TROUBLESHOOTING.md) | See troubleshooting guide |
 
 ### Issue Resolution
 
 | Symptom | Documentation | Solution |
 |---------|---------------|----------|
 | Voice scores 0.00 | [MLX LoRA Issue](mlx/MLX_LORA_TRAINING_ISSUE.md) | Verify LoRA adapters attached |
-| `<|endoftext|>` spam | [Troubleshooting](mlx/MLX_BACKEND_TROUBLESHOOTING.md) | Run diagnostic test |
-| Prompt format errors | [Prompt Fix](PROMPT_FORMAT_FIX.md) | Use `apply_chat_template()` |
-| Adapter corruption | [Adapter Debug](../ADAPTER_STACKING_DEBUG.md) | Use MLX backend |
-| Training too slow | [Troubleshooting](mlx/MLX_BACKEND_TROUBLESHOOTING.md) | Increase batch size |
+| Training too slow | [Troubleshooting](mlx/MLX_BACKEND_TROUBLESHOOTING.md) | Increase batch size, use packing |
+| Low quality | [Training Guide](user-guide/training.md) | Use SimPO, enable NEFTune |
+| Out of memory | [Training Guide](user-guide/training.md) | Reduce batch size, use gradient accumulation |
 
 ---
 
@@ -198,6 +179,6 @@ Documents should cross-reference related docs:
 
 ---
 
-**Document Version**: 1.0  
-**Last Updated**: January 28, 2026  
+**Document Version**: 2.0  
+**Last Updated**: January 30, 2026  
 **Maintainer**: Project Team

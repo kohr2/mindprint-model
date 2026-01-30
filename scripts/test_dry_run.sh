@@ -3,6 +3,8 @@
 # Usage: ./test_dry_run.sh [config-file]
 
 set -e
+set -u
+set -o pipefail
 
 CONFIG_FILE="${1:-configs/training_pipeline.yaml}"
 MODEL="${MAC_STUDIO_MODEL:-Qwen/Qwen2.5-7B-Instruct}"

@@ -1,0 +1,12 @@
+{
+  "topics_processed": 10,
+  "chapters_processed": 14,
+  "units_processed": 4,
+  "total_questions_before": 25,
+  "total_questions_after": 25,
+  "questions_generated": 0,
+  "sft_examples": 139,
+  "preference_pairs": 139,
+  "critical_pairs": 10,
+  "timestamp": "2026-01-29T10:54:57.162898"
+}

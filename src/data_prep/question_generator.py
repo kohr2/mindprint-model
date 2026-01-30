@@ -13,6 +13,8 @@ import os
 from anthropic import Anthropic
 
 from .textbook_parser import Question, TopicQuiz, TextbookParser
+from .voice_aware_processor import VoiceAwareProcessor
+from .answer_splitter import AnswerSplitter
 
 logger = logging.getLogger(__name__)
 
@@ -21,10 +23,15 @@ logger = logging.getLogger(__name__)
 class GenerationConfig:
     """Configuration for question generation."""
 
-    target_questions: int = 10
+    target_questions: int = 15  # Increased from 10
     model: str = "claude-sonnet-4-20250514"
     max_tokens: int = 4096
     temperature: float = 0.7
+    min_answer_length: int = 600
+    max_answer_length: int = 1200
+    min_voice_marker_density: float = 20.0  # Percentage
+    enhance_voice: bool = True
+    normalize_lengths: bool = True
 
 
 class QuestionGenerator:
@@ -54,6 +61,17 @@ class QuestionGenerator:
                 "Anthropic API key required. Set ANTHROPIC_API_KEY environment variable."
             )
         self.client = Anthropic(api_key=api_key)
+
+        # Initialize voice processor and splitter
+        self.voice_processor = VoiceAwareProcessor(
+            min_voice_density=self.config.min_voice_marker_density,
+            min_length=self.config.min_answer_length,
+            max_length=self.config.max_answer_length,
+        )
+        self.answer_splitter = AnswerSplitter(
+            target_min=self.config.min_answer_length,
+            target_max=self.config.max_answer_length,
+        )
 
     def augment_topic(self, topic_quiz: TopicQuiz) -> TopicQuiz:
         """
@@ -89,8 +107,14 @@ class QuestionGenerator:
             count=questions_needed,
         )
 
-        # Add new questions to the quiz
-        topic_quiz.questions.extend(new_questions)
+        # Process questions: enhance voice and normalize lengths
+        processed_questions = []
+        for question in new_questions:
+            processed = self._process_question(question, topic_quiz.identifier)
+            processed_questions.extend(processed)
+
+        # Add processed questions to the quiz
+        topic_quiz.questions.extend(processed_questions)
         logger.info(
             f"{topic_quiz.identifier}: Now has {len(topic_quiz.questions)} questions"
         )
@@ -166,11 +190,22 @@ CRITICAL: The 4-year market cycle is NOT caused by the halving. The halving coin
 
 When generating reference answers:
 1. Write in first person as Bob
-2. Include confidence markers ("I've observed", "Here's what I've seen")
-3. Reference market psychology concepts
-4. Use cycle terminology correctly
-5. Be educational but direct
-6. Give practical, actionable insights"""
+2. Include confidence markers ("I've observed", "Here's what I've seen", "In my experience", "I've tracked")
+3. Use engagement markers ("Look,", "Here's the thing", "The key point is")
+4. Reference market psychology concepts (sentiment, crowd behavior, fear, greed)
+5. Use cycle terminology correctly (4-year cycle, DCL, accumulation, distribution, Bressert bands)
+6. Keep answers between {self.config.min_answer_length} and {self.config.max_answer_length} characters
+7. Ensure voice markers appear frequently (at least {self.config.min_voice_marker_density}% of words should be voice markers)
+8. Be educational but direct
+9. Give practical, actionable insights
+
+VOICE MARKER REQUIREMENTS:
+- Confidence markers: "I've tracked", "I've seen", "In my experience", "What I've found"
+- Engagement markers: "Look,", "Here's the thing", "The key point is"
+- Psychology emphasis: "market psychology", "crowd behavior", "sentiment", "fear", "greed"
+- Cycle terminology: "4-year cycle", "cycle low", "accumulation", "distribution"
+
+Each answer should naturally include multiple voice markers throughout."""
 
     def _build_user_prompt(
         self,
@@ -221,6 +256,9 @@ Generate {count} new questions that:
 2. Range from conceptual understanding to practical application
 3. Include questions that test critical thinking about cycles
 4. Have reference answers written in Bob's voice (confident, educational, pattern-focused)
+5. Each reference answer must be between {self.config.min_answer_length} and {self.config.max_answer_length} characters
+6. Each reference answer must include multiple voice markers (confidence, engagement, psychology, terminology)
+7. Voice markers should appear naturally throughout the answer, not just at the start
 
 Format your response as JSON array:
 ```json
@@ -274,6 +312,7 @@ Generate exactly {count} questions. Ensure each question is unique and tests dif
                         reference_answer=item["reference_answer"],
                         question_type="open",
                         key_concepts=item.get("key_concepts", []),
+                        source=item.get("source", ""),  # Preserve source if provided
                     )
                     questions.append(question)
 
@@ -282,3 +321,69 @@ Generate exactly {count} questions. Ensure each question is unique and tests dif
             logger.debug(f"Content was: {json_str[:500]}")
 
         return questions
+
+    def _process_question(
+        self, question: Question, topic_id: str
+    ) -> List[Question]:
+        """
+        Process a question to enhance voice and normalize length.
+
+        Args:
+            question: Question to process
+            topic_id: Topic identifier
+
+        Returns:
+            List of processed questions (may be multiple if answer was split)
+        """
+        answer = question.reference_answer
+
+        # Enhance voice if enabled
+        if self.config.enhance_voice:
+            answer = self.voice_processor.enhance_answer(
+                question.question, answer, topic_id
+            )
+
+        # Validate voice quality
+        metrics = self.voice_processor.validate_quality(answer)
+        if not metrics.meets_voice_threshold:
+            logger.warning(
+                f"Question voice density {metrics.voice_marker_density:.1f}% "
+                f"below threshold {self.config.min_voice_marker_density}%"
+            )
+
+        # Normalize length if enabled
+        if self.config.normalize_lengths:
+            segments = self.answer_splitter.split_answer(
+                question.question, answer, topic_id
+            )
+
+            # Create multiple questions if answer was split
+            processed_questions = []
+            for i, segment_data in enumerate(segments):
+                new_question = Question(
+                    question=segment_data["question"],
+                    reference_answer=segment_data["answer"],
+                    question_type=question.question_type,
+                    key_concepts=question.key_concepts,
+                    source=question.source or topic_id,
+                )
+                processed_questions.append(new_question)
+
+            return processed_questions
+        else:
+            # Just update the answer
+            question.reference_answer = answer
+            return [question]
+
+    def _validate_voice_markers(self, answer: str) -> float:
+        """
+        Validate voice marker density in an answer.
+
+        Args:
+            answer: Answer text to validate
+
+        Returns:
+            Voice marker density percentage
+        """
+        metrics = self.voice_processor.validate_quality(answer)
+        return metrics.voice_marker_density

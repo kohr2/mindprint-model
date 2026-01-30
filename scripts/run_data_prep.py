@@ -86,8 +86,8 @@ Examples:
     parser.add_argument(
         "--target-questions",
         type=int,
-        default=10,
-        help="Target number of questions per topic (default: 10)",
+        default=15,
+        help="Target number of questions per topic (default: 15)",
     )
     parser.add_argument(
         "--target-episode-questions",
@@ -104,6 +104,48 @@ Examples:
         "--no-critical",
         action="store_true",
         help="Skip critical distinction pairs",
+    )
+    parser.add_argument(
+        "--enhance-voice",
+        action="store_true",
+        default=True,
+        help="Enhance voice markers in generated answers (default: True)",
+    )
+    parser.add_argument(
+        "--no-enhance-voice",
+        action="store_false",
+        dest="enhance_voice",
+        help="Disable voice marker enhancement",
+    )
+    parser.add_argument(
+        "--normalize-lengths",
+        action="store_true",
+        default=True,
+        help="Normalize answer lengths to 600-1200 chars (default: True)",
+    )
+    parser.add_argument(
+        "--no-normalize-lengths",
+        action="store_false",
+        dest="normalize_lengths",
+        help="Disable answer length normalization",
+    )
+    parser.add_argument(
+        "--min-length",
+        type=int,
+        default=600,
+        help="Minimum answer length in characters (default: 600)",
+    )
+    parser.add_argument(
+        "--max-length",
+        type=int,
+        default=1200,
+        help="Maximum answer length in characters (default: 1200)",
+    )
+    parser.add_argument(
+        "--min-voice-density",
+        type=float,
+        default=20.0,
+        help="Minimum voice marker density percentage (default: 20.0)",
     )
     parser.add_argument(
         "--api-key",
@@ -173,6 +215,11 @@ def main():
     print(f"Target episodes:   {args.target_episode_questions}")
     print(f"Augment questions: {not args.no_augment}")
     print(f"Critical pairs:    {not args.no_critical}")
+    print(f"Enhance voice:     {args.enhance_voice}")
+    print(f"Normalize lengths: {args.normalize_lengths}")
+    if args.normalize_lengths:
+        print(f"Length range:      {args.min_length}-{args.max_length} chars")
+    print(f"Min voice density: {args.min_voice_density}%")
     if args.mode == "combined":
         print(f"Textbook ratio:    {args.textbook_ratio}")
     print(f"Dry run:           {args.dry_run}")
@@ -227,6 +274,11 @@ def main():
             include_critical_distinctions=not args.no_critical,
             api_key=args.api_key,
             textbook_ratio=args.textbook_ratio,
+            enhance_voice=args.enhance_voice,
+            normalize_lengths=args.normalize_lengths,
+            min_answer_length=args.min_length,
+            max_answer_length=args.max_length,
+            min_voice_marker_density=args.min_voice_density,
         )
 
         pipeline = DataPipeline(config)
@@ -234,6 +286,32 @@ def main():
 
         print("\nData preparation complete!")
         print(f"Output saved to: {Path(args.output).absolute()}")
+        
+        # Validate dataset quality
+        print("\nValidating dataset quality...")
+        try:
+            import importlib.util
+            validator_path = Path(__file__).parent / "validate_dataset_quality.py"
+            spec = importlib.util.spec_from_file_location("validate_dataset_quality", validator_path)
+            validator_module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(validator_module)
+            
+            output_path = Path(args.output)
+            sft_file = output_path / "sft_data.jsonl"
+            pref_file = output_path / "preference_data.jsonl"
+            
+            if sft_file.exists() and pref_file.exists():
+                sft_results = validator_module.validate_sft_data(sft_file, min_examples_per_topic=args.target_questions)
+                pref_results = validator_module.validate_preference_data(pref_file)
+                overall_pass = validator_module.print_validation_report(sft_results, pref_results)
+                
+                if not overall_pass:
+                    print("\n⚠️  Dataset quality validation failed. Review the issues above.")
+                    print("You may still proceed with training, but results may be suboptimal.")
+        except Exception as e:
+            logger.warning(f"Could not run quality validation: {e}")
+            print("Skipping quality validation (run scripts/validate_dataset_quality.py manually)")
+        
         return 0
 
     except Exception as e:

@@ -1,0 +1,96 @@
+# Qwen2.5-72B Configuration for Bob Loukas Mindprint
+# Large-scale model for Mac Studio M2 Ultra (64GB) with INT4 quantization
+
+name: qwen2.5-72b
+hf_path: Qwen/Qwen2.5-72B-Instruct
+layers: 80
+hidden_size: 8192
+attention_heads: 64
+kv_heads: 8
+context_length: 131072
+prompt_format: chatml
+
+# Layer targeting strategy
+# Scaled from Gemma-3-12B (48 layers) to 80 layers
+# 25% lexicon / 50% reasoning / 25% voice distribution
+layer_zones:
+  lexicon:
+    layers: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+    modules: ["q_proj"]
+    content: "Bob's terminology (4-year cycle, accumulation, distribution, cycle low/high, parabolic advance)"
+
+  reasoning:
+    layers: "20-59"
+    modules: ["v_proj", "up_proj", "down_proj"]
+    content: "Cycle theory, pattern recognition, market psychology analysis, multi-timeframe analysis"
+
+  voice:
+    layers: [60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79]
+    modules: ["o_proj", "up_proj", "down_proj"]
+    content: "Confidence markers, teaching style, engagement patterns, hedge language"
+
+# LoRA configuration
+# Conservative approach: Same as Gemma-3-12B (r=8)
+lora:
+  r: 8
+  alpha: 16
+  dropout: 0.05
+  target_modules:
+    - q_proj
+    - v_proj
+    - o_proj
+    - up_proj
+    - down_proj
+
+# Compute requirements
+# Mac Studio M2 Ultra (64GB) with INT4 quantization
+compute:
+  vram_fp16: 145    # GB for fp16 (NOT FEASIBLE)
+  vram_int8: 72     # GB for int8 (NOT FEASIBLE)
+  vram_4bit: 36     # GB for 4-bit (COMPATIBLE with Mac Studio)
+  vram_bf16: 145    # GB for bfloat16 (NOT FEASIBLE)
+
+  # Training configuration
+  batch_size: 1                 # INT4 training on Mac Studio
+  batch_size_4bit: 1            # Limited by memory
+  gradient_accumulation: 4      # Effective batch size = 4
+
+  # Time estimates (Mac Studio M2 Ultra with INT4)
+  hours_sft_per_topic: 8        # 6-8 hours per topic
+  hours_dpo_per_topic: 10       # 8-10 hours per topic
+  hours_dpo: 100                # Full curriculum (~10 topics)
+  hours_ppo: 150                # PPO if needed
+
+  # Memory optimization flags
+  gradient_checkpointing: true
+  max_seq_length: 4096          # Conservative (not full 131K)
+  bf16_mixed_precision: true
+  nested_quantization: true     # bnb_4bit_use_double_quant
+
+  # Platform-specific configuration
+  platforms:
+    mac_studio_m2_ultra:
+      memory: 64                # GB unified memory
+      usable_memory: 48         # 75% usable for VRAM
+      precision: int4           # 4-bit quantization REQUIRED
+      batch_size: 1
+      gradient_accumulation: 4
+      backend: mlx              # Recommended (Apple Silicon optimized)
+      flash_attention: false    # Not available on MPS
+      quantization_type: "nf4"  # NormalFloat 4-bit
+
+    a100_80gb:
+      precision: 4bit
+      batch_size: 2
+      gradient_accumulation: 2
+      backend: pytorch
+      flash_attention: true
+      quantization_type: "nf4"
+
+    h100_80gb:
+      precision: 4bit
+      batch_size: 2
+      gradient_accumulation: 2
+      backend: pytorch
+      flash_attention: true
+      quantization_type: "int4"  # Native INT4 on Hopper

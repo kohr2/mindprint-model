@@ -1,0 +1,65 @@
+site_name: Mindprint Model
+site_description: Production-grade RLHF fine-tuning for personalized language models
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - content.code.copy
+    - content.code.annotate
+  palette:
+    - scheme: default
+      primary: blue
+      accent: blue
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: blue
+      accent: blue
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: true
+            docstring_style: google
+            show_root_heading: true
+            show_root_toc_entry: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: getting-started/installation.md
+    - Quickstart: getting-started/quickstart.md
+    - Configuration: getting-started/configuration.md
+  - User Guide:
+    - Training: user-guide/training.md
+    - Evaluation: user-guide/evaluation.md
+    - Data Preparation: user-guide/data-preparation.md
+  - Concepts:
+    - Architecture: concepts/architecture.md
+    - Loss Functions: concepts/loss-functions.md
+    - LoRA: concepts/lora.md
+  - API Reference:
+    - Core:
+      - Losses: api-reference/core/losses.md
+      - Schedulers: api-reference/core/schedulers.md
+  - Tutorials:
+    - First Model: tutorials/train-your-first-model.md
+  - Contributing:
+    - Development Setup: contributing/development-setup.md
+    - Testing: contributing/testing.md
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences

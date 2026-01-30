@@ -415,7 +415,7 @@ Run the same training with both backends:
 
 ```bash
 # Compare backends
-python scripts/compare_backends.py --model Qwen/Qwen2.5-7B-Instruct
+# Note: compare_backends.py script has been removed. Use backend-specific training scripts instead.
 ```
 
 ### 4. Run Tests
@@ -543,7 +543,7 @@ For migration help:
 
 1. Check [src/backends/README.md](../src/backends/README.md) for API docs
 2. See examples in `tests/integration/`
-3. Run comparison script: `python scripts/compare_backends.py`
+3. Test backends individually using `scripts/run_dpo_training.py` with `--backend` flag
 4. Open GitHub issue if you encounter problems
 
 ---

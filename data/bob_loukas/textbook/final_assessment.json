@@ -1,0 +1,127 @@
+{
+  "level": "final",
+  "title": "Final Assessment",
+  "description": "Cross-unit assessment testing comprehensive understanding",
+  "questions": [
+    {
+      "question": "What are the four phases of the market cycle in order?",
+      "reference_answer": "**Accumulation, Markup, Distribution, Markdown**",
+      "type": "open",
+      "source_unit": "unit-01"
+    },
+    {
+      "question": "What happens to Bitcoin's block reward during the halving?",
+      "reference_answer": "**It's cut in half**",
+      "type": "open",
+      "source_unit": "unit-01"
+    },
+    {
+      "question": "What are the three nested timeframes in Bob's framework?",
+      "reference_answer": "**4-year cycle, 40-week cycle, 60-day cycle**",
+      "type": "open",
+      "source_unit": "unit-01"
+    },
+    {
+      "question": "What does right-translation indicate?",
+      "reference_answer": "**Bullish momentum; the cycle high occurs after the midpoint**",
+      "type": "open",
+      "source_unit": "unit-01"
+    },
+    {
+      "question": "During a markup phase, where is price typically located relative to the 20-week MA?",
+      "reference_answer": "**Above the 20-week MA (which acts as support)**",
+      "type": "open",
+      "source_unit": "unit-01"
+    },
+    {
+      "question": "How are cycles always measured in financial markets?",
+      "reference_answer": "**From cycle low to cycle low**\n\nEvery cycle is measured from one low to the next low, with each low marking both the end of one cycle and the beginning of the next.",
+      "type": "open",
+      "source_unit": "unit-02"
+    },
+    {
+      "question": "What pattern do cycle lows typically form, and why?",
+      "reference_answer": "**V-shaped pattern - because the selloff at the end is steep and severe, followed by a sharp rebound**\n\nThe V-pattern occurs due to capitulation selling followed by short covering and buyers rushing back in.",
+      "type": "open",
+      "source_unit": "unit-02"
+    },
+    {
+      "question": "What drives the initial thrust higher in a new cycle after a cycle low?",
+      "reference_answer": "**Short covering rally - overleveraged shorts are forced to buy back their positions**\n\nAs price rebounds, traders who sold short on margin must cover (buy back) their positions, creating buying pressure that amplifies the initial recovery.",
+      "type": "open",
+      "source_unit": "unit-02"
+    },
+    {
+      "question": "What is the primary use of the 40-week cycle?",
+      "reference_answer": "**Tactical timing for entries and exits within the larger 4-year cycle**",
+      "type": "open",
+      "source_unit": "unit-02"
+    },
+    {
+      "question": "How many 40-week cycles typically occur in one 4-year cycle?",
+      "reference_answer": "**4-5 complete 40-week cycles**",
+      "type": "open",
+      "source_unit": "unit-02"
+    },
+    {
+      "question": "What is Rule #1 in Bob's framework?",
+      "reference_answer": "**Never fight the 4-year cycle—trade with the trend**",
+      "type": "open",
+      "source_unit": "unit-03"
+    },
+    {
+      "question": "What is the 1-2% rule?",
+      "reference_answer": "**Risk only 1-2% of your account per trade**",
+      "type": "open",
+      "source_unit": "unit-03"
+    },
+    {
+      "question": "How do you calculate position size?",
+      "reference_answer": "**Risk amount ÷ distance to stop loss = position size**",
+      "type": "open",
+      "source_unit": "unit-03"
+    },
+    {
+      "question": "If you risk $1,000 with entry at $50k and stop at $47k, what position size should you use?",
+      "reference_answer": "**0.33 BTC** ($1,000 ÷ $3,000 distance)",
+      "type": "open",
+      "source_unit": "unit-03"
+    },
+    {
+      "question": "What should you do when a trade goes against you?",
+      "reference_answer": "**Cut the loss quickly and exit at your stop**",
+      "type": "open",
+      "source_unit": "unit-03"
+    },
+    {
+      "question": "What is top-down analysis?",
+      "reference_answer": "**Starting with the largest timeframe (4-year) and working down to smaller timeframes (40-week, 60-day)**",
+      "type": "open",
+      "source_unit": "unit-04"
+    },
+    {
+      "question": "Why must you start analysis with the 4-year cycle?",
+      "reference_answer": "**It establishes the dominant trend and directional bias**",
+      "type": "open",
+      "source_unit": "unit-04"
+    },
+    {
+      "question": "What is \"Red Path vs Green Path\"?",
+      "reference_answer": "**Mapping out two possible futures (bullish and bearish) and planning for both**",
+      "type": "open",
+      "source_unit": "unit-04"
+    },
+    {
+      "question": "What can you control in trading?",
+      "reference_answer": "**Your entry, stop loss, position size, and exit plan**",
+      "type": "open",
+      "source_unit": "unit-04"
+    },
+    {
+      "question": "What should you do when you realize you're wrong about a trade?",
+      "reference_answer": "**Exit quickly and preserve capital**",
+      "type": "open",
+      "source_unit": "unit-04"
+    }
+  ]
+}

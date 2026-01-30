@@ -1,0 +1,17 @@
+[
+  {
+    "question": "What is a cycle low?",
+    "correct_answer": "The bottom of a 4-year market cycle with maximum pessimism",
+    "voice_markers": ["4-year", "cycle", "bottom", "pessimism"]
+  },
+  {
+    "question": "What happens during a Bitcoin halving?",
+    "correct_answer": "The block reward is cut in half, reducing new supply",
+    "voice_markers": ["halving", "supply", "block reward"]
+  },
+  {
+    "question": "When does the euphoria phase occur?",
+    "correct_answer": "12-18 months after a halving, near the cycle top",
+    "voice_markers": ["euphoria", "cycle top", "12-18 months"]
+  }
+]

@@ -4,10 +4,13 @@ RLHF (Reinforcement Learning from Human Feedback) fine-tuning system for creatin
 
 ## Features
 
+- **State-of-the-Art Training**: SimPO, ORPO, DPO loss functions with modern techniques
 - **Multi-Backend Support**: Train with PyTorch (CUDA/CPU) or MLX (Apple Silicon)
-- **DPO Training**: Direct Preference Optimization for aligning models with human preferences
-- **SFT Training**: Supervised Fine-Tuning for teaching specific knowledge
-- **LoRA Adapters**: Parameter-efficient fine-tuning with Low-Rank Adaptation
+- **Clean Architecture**: Modular, testable, production-ready codebase
+- **Comprehensive Testing**: Unit, integration, property-based, and benchmark tests
+- **Professional Documentation**: API reference, tutorials, architecture guides
+- **Production Infrastructure**: CI/CD, experiment tracking, reproducibility
+- **LoRA Adapters**: Parameter-efficient fine-tuning with optimized configuration
 - **Curriculum Learning**: Progressive training across multiple topics
 - **Voice Fidelity Evaluation**: Assess how well the model maintains target voice/style
 
@@ -48,18 +51,30 @@ pip install mlx mlx-lm
 
 ### Basic Training
 
-```bash
-# Train with PyTorch backend (CUDA GPU)
-python scripts/run_dpo_training.py \
-  --config configs/training_pipeline.yaml \
-  --backend pytorch \
-  --device cuda
+**Recommended: SimPO (best quality/speed tradeoff)**
 
-# Train with MLX backend (Mac Studio)
+```bash
+# Train with MLX backend (Mac Studio) using SimPO
 python scripts/run_dpo_training.py \
   --config configs/training_pipeline.yaml \
   --backend mlx \
-  --device auto
+  --loss-type simpo
+```
+
+**Other options:**
+
+```bash
+# DPO (standard, requires reference model)
+python scripts/run_dpo_training.py \
+  --config configs/training_pipeline.yaml \
+  --backend mlx \
+  --loss-type dpo
+
+# ORPO (single-stage, fastest)
+python scripts/run_dpo_training.py \
+  --config configs/training_pipeline.yaml \
+  --backend mlx \
+  --loss-type orpo
 ```
 
 ### Configuration
@@ -77,21 +92,37 @@ backend:
 model:
   name: Qwen/Qwen2.5-7B-Instruct
 
+# Training configuration
+training:
+  loss_type: simpo  # "dpo", "simpo", "orpo"
+  warmup_ratio: 0.1
+  gradient_accumulation_steps: 8
+  neftune_noise_alpha: 5.0
+
 # SFT configuration
 sft:
   epochs_per_topic: 3
   learning_rate: 3e-4
   batch_size: 4
-  lora_r: 8
-  lora_alpha: 16
+  lora_rank: 32  # Increased from 8 for better quality
+  lora_alpha: 64  # Typically 2x rank
+  lora_dropout: 0.05
+  target_modules:  # All linear layers
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
 
-# DPO configuration
-dpo:
+# DPO/SimPO configuration
+preference:
+  loss_type: simpo  # "dpo", "simpo"
   steps_per_topic: 100
   learning_rate: 5e-7
-  beta: 0.1
-  lora_r: 1
-  lora_alpha: 2
+  beta: 2.0  # SimPO beta (or 0.1 for DPO)
+  gamma: 0.5  # SimPO margin
 ```
 
 ## Supported Models

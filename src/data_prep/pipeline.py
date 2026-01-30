@@ -33,12 +33,18 @@ class PipelineConfig:
     summaries_dir: Optional[str] = None  # Episode summaries from mindprint-agent
     use_transcripts: bool = False
     combine_with_textbook: bool = False
-    target_questions_per_topic: int = 10
+    target_questions_per_topic: int = 15  # Increased from 10
     target_questions_per_episode: int = 15
     augment_questions: bool = True
     include_critical_distinctions: bool = True
     api_key: Optional[str] = None  # For question generation
     textbook_ratio: float = 0.6  # Ratio of textbook data when combining (0.6 = 60% textbook, 40% transcripts)
+    # New quality control parameters
+    enhance_voice: bool = True
+    normalize_lengths: bool = True
+    min_answer_length: int = 600
+    max_answer_length: int = 1200
+    min_voice_marker_density: float = 20.0  # Percentage
 
 
 @dataclass
@@ -78,7 +84,12 @@ class DataPipeline:
             self.parser = TextbookParser(config.textbook_path)
             if config.augment_questions:
                 gen_config = GenerationConfig(
-                    target_questions=config.target_questions_per_topic
+                    target_questions=config.target_questions_per_topic,
+                    min_answer_length=config.min_answer_length,
+                    max_answer_length=config.max_answer_length,
+                    min_voice_marker_density=config.min_voice_marker_density,
+                    enhance_voice=config.enhance_voice,
+                    normalize_lengths=config.normalize_lengths,
                 )
                 self.question_gen = QuestionGenerator(
                     parser=self.parser,
@@ -160,6 +171,13 @@ class DataPipeline:
             if self.config.augment_questions and self.question_gen:
                 logger.info("Augmenting textbook questions")
                 topic_quizzes = self.question_gen.augment_all(topic_quizzes)
+                
+                # Ensure questions have proper source identifiers
+                for quiz in topic_quizzes:
+                    for question in quiz.questions:
+                        if not question.source:
+                            question.source = quiz.identifier
+                
                 self.stats.total_questions_after = sum(
                     len(q.questions) for q in topic_quizzes
                 )
@@ -168,6 +186,12 @@ class DataPipeline:
                 )
             else:
                 self.stats.total_questions_after = self.stats.total_questions_before
+                
+                # Ensure questions have proper source identifiers even without augmentation
+                for quiz in topic_quizzes:
+                    for question in quiz.questions:
+                        if not question.source:
+                            question.source = quiz.identifier
 
             # Generate textbook SFT and preference data
             textbook_sft_data = self._create_sft_data(topic_quizzes, chapter_tests, unit_exams)
@@ -196,7 +220,8 @@ class DataPipeline:
 
             # Create SFT data from transcript questions
             for question in transcript_questions:
-                source = question.source or 'transcript'
+                # Use question.source if set, otherwise default to 'transcript'
+                source = question.source if question.source else 'transcript'
                 transcript_sft_data.append({
                     "instruction": question.question,
                     "input": "",
@@ -307,33 +332,39 @@ class DataPipeline:
         # From topic quizzes
         for quiz in topic_quizzes:
             for question in quiz.questions:
+                # Use question.source if set, otherwise use quiz identifier
+                source = question.source if question.source else quiz.identifier
                 sft_data.append({
                     "instruction": question.question,
                     "input": "",
                     "output": question.reference_answer,
-                    "source": quiz.identifier,
+                    "source": source,  # Ensure proper topic mapping
                 })
 
         # From chapter tests (short answer only, MC/TF don't work well for SFT)
         for test in chapter_tests:
             for question in test.questions:
                 if question.question_type == "open":
+                    # Use question.source if set, otherwise use test identifier
+                    source = question.source if question.source else test.identifier
                     sft_data.append({
                         "instruction": question.question,
                         "input": "",
                         "output": question.reference_answer,
-                        "source": test.identifier,
+                        "source": source,  # Ensure proper topic mapping
                     })
 
         # From unit exams
         for exam in unit_exams:
             for question in exam.questions:
                 if question.question_type == "open":
+                    # Use question.source if set, otherwise use exam identifier
+                    source = question.source if question.source else exam.identifier
                     sft_data.append({
                         "instruction": question.question,
                         "input": "",
                         "output": question.reference_answer,
-                        "source": exam.identifier,
+                        "source": source,  # Ensure proper topic mapping
                     })
 
         return sft_data
@@ -350,19 +381,25 @@ class DataPipeline:
         # From topic quizzes
         for quiz in topic_quizzes:
             for question in quiz.questions:
-                all_questions.append((question, quiz.identifier))
+                # Use question.source if set, otherwise use quiz identifier
+                source = question.source if question.source else quiz.identifier
+                all_questions.append((question, source))
 
         # From chapter tests (open-ended only)
         for test in chapter_tests:
             for question in test.questions:
                 if question.question_type == "open":
-                    all_questions.append((question, test.identifier))
+                    # Use question.source if set, otherwise use test identifier
+                    source = question.source if question.source else test.identifier
+                    all_questions.append((question, source))
 
         # From unit exams
         for exam in unit_exams:
             for question in exam.questions:
                 if question.question_type == "open":
-                    all_questions.append((question, exam.identifier))
+                    # Use question.source if set, otherwise use exam identifier
+                    source = question.source if question.source else exam.identifier
+                    all_questions.append((question, source))
 
         return self.preference_gen.generate_all(all_questions)
 
@@ -384,6 +421,7 @@ class DataPipeline:
                 "prompt": p.prompt,
                 "chosen": p.chosen,
                 "rejected": p.rejected,
+                "source": p.source,  # Include source for proper topic mapping
             }
             for p in preference_pairs
         ]

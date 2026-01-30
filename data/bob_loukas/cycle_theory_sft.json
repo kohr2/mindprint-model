@@ -1,0 +1,22 @@
+[
+  {
+    "instruction": "What is a cycle low in market analysis?",
+    "output": "A cycle low is the bottom of a 4-year market cycle, typically occurring around 4 years after the previous low. It represents a period of maximum pessimism and minimum prices, often coinciding with events like Bitcoin halvings. Cycle lows are characterized by extreme fear, capitulation, and historically represent the best long-term buying opportunities."
+  },
+  {
+    "instruction": "Explain the concept of a Bitcoin halving and its significance.",
+    "output": "A Bitcoin halving is an event that occurs approximately every 4 years where the block reward for miners is cut in half, reducing the rate of new Bitcoin creation. This programmed scarcity event has historically preceded major bull markets. The halving creates a supply shock that, combined with steady or increasing demand, tends to drive prices higher over the following 12-18 months."
+  },
+  {
+    "instruction": "What happens during the euphoria phase of a market cycle?",
+    "output": "The euphoria phase occurs near the cycle top, typically 12-18 months after a halving. During this phase, retail investors flood into the market, mainstream media coverage peaks, and prices reach unsustainable levels. This is characterized by extreme greed, FOMO (fear of missing out), and the belief that 'this time is different.' Smart investors use this phase to take profits and reduce exposure."
+  },
+  {
+    "instruction": "How do you identify accumulation zones in crypto markets?",
+    "output": "Accumulation zones occur during cycle lows and are identified by several factors: prolonged sideways price action, declining volume, extreme fear in sentiment indicators, capitulation events where weak hands sell, and prices trading below key moving averages. During accumulation, smart money quietly builds positions while retail investors are scared or disinterested. This phase can last 6-12 months."
+  },
+  {
+    "instruction": "What is the relationship between Bitcoin dominance and altcoin seasons?",
+    "output": "Bitcoin dominance measures Bitcoin's market cap as a percentage of total crypto market cap. When Bitcoin dominance rises, capital flows into Bitcoin at the expense of altcoins. Conversely, when Bitcoin dominance falls, we typically see 'altcoin seasons' where altcoins outperform Bitcoin. This rotation pattern is cyclical: Bitcoin leads early in bull markets, then capital rotates to large-cap alts, then to small-cap alts as the cycle matures."
+  }
+]

@@ -1,0 +1,17 @@
+[
+  {
+    "instruction": "What is a cycle low?",
+    "chosen": "A cycle low is the bottom of a 4-year market cycle, typically occurring around 4 years after the previous low. It represents maximum pessimism and minimum prices.",
+    "rejected": "A cycle low is when prices go down a lot and then go back up again."
+  },
+  {
+    "instruction": "When should you buy Bitcoin?",
+    "chosen": "The best time to buy Bitcoin is during cycle lows, characterized by extreme fear, capitulation, and prices near multi-year lows. This typically occurs around halving events.",
+    "rejected": "You should buy Bitcoin when everyone is talking about it and prices are going up fast."
+  },
+  {
+    "instruction": "What causes Bitcoin bull markets?",
+    "chosen": "Bitcoin bull markets are primarily driven by the halving-induced supply shock combined with increasing adoption and demand. The 4-year cycle pattern has been remarkably consistent.",
+    "rejected": "Bull markets happen randomly when people get excited about crypto."
+  }
+]

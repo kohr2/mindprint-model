@@ -5,6 +5,8 @@
 # Example: ./test_single_topic_mlx.sh unit-01 chapter-01 topic-01
 
 set -e
+set -u
+set -o pipefail
 
 UNIT="${1:-unit-01}"
 CHAPTER="${2:-chapter-01}"

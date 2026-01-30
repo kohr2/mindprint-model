@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Dict, Optional, Any
 from enum import Enum
+from datetime import datetime
 import logging
 import time
 import json
@@ -90,6 +91,7 @@ class PipelineConfig:
     data_dir: str = "./data"
     output_dir: str = "./output"
     checkpoint_dir: str = "./checkpoints"
+    config_filename: Optional[str] = None  # Path to config file for dataset extraction
 
 
 @dataclass
@@ -271,6 +273,15 @@ class DPOPipeline:
         # Ensure tokenizer has pad token
         if self.tokenizer and self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
+
+        # Modify output_dir to include dataset name and timestamp
+        # This ensures adapter files don't overwrite each other
+        dataset_name = self._extract_dataset_name()
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        base_output_dir = Path(self.config.output_dir)
+        self.config.output_dir = str(base_output_dir / f"{dataset_name}_{timestamp}")
+        
+        logger.info(f"Output directory: {self.config.output_dir}")
 
         # Create output directories
         Path(self.config.output_dir).mkdir(parents=True, exist_ok=True)
@@ -665,23 +676,77 @@ class DPOPipeline:
         except Exception as e:
             logger.error(f"Unit merge failed: {e}")
 
+    def _extract_dataset_name(self) -> str:
+        """
+        Extract dataset name from config filename or data_dir.
+        
+        Returns:
+            Dataset name (textbook, transcripts, combined, or default)
+        """
+        dataset_name = "default"
+        if self.config.config_filename:
+            config_stem = Path(self.config.config_filename).stem
+            if "textbook" in config_stem:
+                dataset_name = "textbook"
+            elif "transcripts" in config_stem:
+                dataset_name = "transcripts"
+            elif "combined" in config_stem:
+                dataset_name = "combined"
+            else:
+                # Fallback: try to extract from data_dir
+                data_dir = Path(self.config.data_dir)
+                if data_dir.name in ["textbook", "transcripts", "combined"]:
+                    dataset_name = data_dir.name
+        else:
+            # Fallback: try to extract from data_dir if config_filename not set
+            data_dir = Path(self.config.data_dir)
+            if data_dir.name in ["textbook", "transcripts", "combined"]:
+                dataset_name = data_dir.name
+        
+        return dataset_name
+
     def save_checkpoint(self, progress: Dict) -> Path:
         """
-        Save training checkpoint.
+        Save training checkpoint with timestamped filename.
+        
+        Saves both:
+        - Timestamped file: checkpoint_{dataset}_{timestamp}.json
+        - Latest file: latest.json (for backward compatibility)
 
         Args:
             progress: Progress data to save
 
         Returns:
-            Path to saved checkpoint
+            Path to saved timestamped checkpoint
         """
-        checkpoint_path = Path(self.config.checkpoint_dir) / "latest.json"
-
-        with open(checkpoint_path, "w") as f:
+        # Ensure checkpoint directory exists
+        checkpoint_dir = Path(self.config.checkpoint_dir)
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Extract dataset name (reuse helper method)
+        dataset_name = self._extract_dataset_name()
+        
+        # Generate timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Create timestamped filename
+        timestamped_filename = f"checkpoint_{dataset_name}_{timestamp}.json"
+        timestamped_path = checkpoint_dir / timestamped_filename
+        
+        # Save timestamped checkpoint
+        with open(timestamped_path, "w") as f:
             json.dump(progress, f, indent=2)
-
-        logger.info(f"Saved checkpoint to {checkpoint_path}")
-        return checkpoint_path
+        
+        logger.info(f"Saved checkpoint to {timestamped_path}")
+        
+        # Also save latest.json for backward compatibility
+        latest_path = checkpoint_dir / "latest.json"
+        with open(latest_path, "w") as f:
+            json.dump(progress, f, indent=2)
+        
+        logger.info(f"Saved latest checkpoint to {latest_path}")
+        
+        return timestamped_path
 
     def resume_from_checkpoint(self, checkpoint_path: Path) -> Dict:
         """

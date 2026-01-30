@@ -159,7 +159,11 @@ Or use the deployment script from your local machine:
 ```bash
 # From your local machine
 cd mindprint-model
-./scripts/train_on_mac_studio.sh mac-studio.local benoit
+# On Mac Studio:
+./scripts/local_train.sh
+
+# Or from MacBook (optional):
+./scripts/quick_deploy.sh
 ```
 
 ## Metrics to Collect
@@ -263,7 +267,8 @@ pip3 install mlx mlx-lm
 - `scripts/test_dry_run.sh` - Configuration verification
 - `scripts/test_single_topic_mlx.sh` - Single-topic test
 - `scripts/monitor_training.sh` - Training monitoring
-- `scripts/train_on_mac_studio.sh` - Updated deployment script
+- `scripts/local_train.sh` - Local training script (run on Mac Studio)
+- `scripts/local_monitor.sh` - Monitor training progress
 
 ## References
 

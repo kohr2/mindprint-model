@@ -104,14 +104,25 @@ class PreferencePairGenerator:
         """
         chosen = question.reference_answer
         # Get source from question if available, otherwise use provided source
-        question_source = question.source or source
-        rejected = self._create_rejected_response(question.question, chosen, question_source)
+        topic_source = question.source if question.source else source
+        
+        # Ensure topic_source is not empty or "unknown"
+        if not topic_source or topic_source == "unknown":
+            logger.warning(
+                f"Generating pair without proper topic source. "
+                f"Question: {question.question[:50]}..."
+            )
+            # Try to extract from question context if possible
+            if not topic_source:
+                topic_source = source if source else "unknown"
+        
+        rejected = self._create_rejected_response(question.question, chosen, topic_source)
 
         return PreferencePair(
             prompt=question.question,
             chosen=chosen,
             rejected=rejected,
-            source=question_source,
+            source=topic_source,  # Properly set to topic ID
         )
 
     def generate_all(

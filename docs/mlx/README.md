@@ -67,7 +67,7 @@ The MLX backend provides native Apple Silicon support for training language mode
 
 | Task | Command/Code |
 |------|--------------|
-| Run diagnostic test | `./scripts/run_test_on_mac_studio.sh <host> <user>` |
+| Run diagnostic test | `python tests/debug/test_mlx_training_state.py` |
 | Check LoRA params | `model.num_trainable_parameters` (should be 392 for Qwen2.5-7B) |
 | Verify generation | Check for `<\|endoftext\|>` spam (should be 0) |
 | Monitor training | `scripts/monitor_training.sh` |
@@ -108,8 +108,9 @@ Located in `tests/`:
 
 Located in `scripts/`:
 
-- `scripts/run_test_on_mac_studio.sh` - Remote diagnostic test runner
-- `scripts/train_on_mac_studio.sh` - Remote training script
+- `scripts/local_train.sh` - Local training script (run on Mac Studio)
+- `scripts/local_monitor.sh` - Local monitoring script
+- `scripts/quick_deploy.sh` - Quick deploy from MacBook (optional)
 - `scripts/monitor_training.sh` - Training progress monitor
 
 ---
@@ -154,7 +155,7 @@ Located in `scripts/`:
 
 ### Diagnostic Steps
 
-1. **Run diagnostic test**: `./scripts/run_test_on_mac_studio.sh <host> <user>`
+1. **Run diagnostic test**: `python tests/debug/test_mlx_training_state.py`
 2. **Check trainable parameters**: Should be 392 for Qwen2.5-7B with LoRA rank 8
 3. **Verify LoRA layers**: Should be 196 layers
 4. **Test generation**: Should produce coherent text, not `<|endoftext|>` spam

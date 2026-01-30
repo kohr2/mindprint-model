@@ -1,0 +1,625 @@
+[
+  {
+    "level": "unit",
+    "unit": "unit-01",
+    "title": "Market Cycle Fundamentals",
+    "questions": [
+      {
+        "question": "What are the four phases of the market cycle in order?",
+        "reference_answer": "**Accumulation, Markup, Distribution, Markdown**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "What happens to Bitcoin's block reward during the halving?",
+        "reference_answer": "**It's cut in half**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "What are the three nested timeframes in Bob's framework?",
+        "reference_answer": "**4-year cycle, 40-week cycle, 60-day cycle**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "What does right-translation indicate?",
+        "reference_answer": "**Bullish momentum; the cycle high occurs after the midpoint**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "During a markup phase, where is price typically located relative to the 20-week MA?",
+        "reference_answer": "**Above the 20-week MA (which acts as support)**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "What are the two dominant emotions that drive market cycles?",
+        "reference_answer": "**Fear and greed**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "When is fear at its peak in the market cycle?",
+        "reference_answer": "**Late markdown/early accumulation (after the crash, \"Bitcoin is dead\")**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "When is greed at its peak?",
+        "reference_answer": "**Distribution (at the top, \"Bitcoin to the moon!\")**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "Why do most traders buy high and sell low?",
+        "reference_answer": "**They follow emotions: buy when greedy (distribution/tops), sell when fearful (markdown/bottoms)**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "What is the primary use of the 4-year cycle?",
+        "reference_answer": "**Strategic decision-making: when to accumulate vs when to exit**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "How long does the markup phase typically last?",
+        "reference_answer": "**18-24 months**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "What does left-translation signal? ## True/False (4 questions)",
+        "reference_answer": "**Bearish; the cycle high occurs before the midpoint, indicating weakness**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "You should buy during accumulation when prices are low and sentiment is fearful.",
+        "reference_answer": "**True**",
+        "type": "true_false",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "The halving immediately causes Bitcoin price to rally.",
+        "reference_answer": "**False** (Rally occurs 6-18 months after the halving)",
+        "type": "true_false",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "The 20-week MA acts as support during bull markets and resistance during bear markets.",
+        "reference_answer": "**True**",
+        "type": "true_false",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "Most traders succeed because they follow the crowd. ## Short Answer (4 questions)",
+        "reference_answer": "**False** (Following the crowd leads to buying tops and selling bottoms)",
+        "type": "true_false",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "Explain why the accumulation phase is the best time to buy, even though it feels risky.",
+        "reference_answer": "Accumulation occurs at cycle lows with bearish sentiment. Prices are lowest, risk/reward is best (limited downside, massive upside), and the next phase is markup (bull market). It feels risky because of fear and boredom, but that's precisely why it's the optimal entry zone.",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "How do nested cycles work together? Explain the relationship between the 4-year, 40-week, and 60-day cycles.",
+        "reference_answer": "The 4-year cycle contains multiple 40-week cycles, and each 40-week cycle contains multiple 60-day cycles. The larger cycle dictates the dominant trend, while smaller cycles provide timing within that trend. Best trades occur when all three cycles align in the same direction.",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "Describe the emotional journey of a typical trader through the four phases and why it causes them to lose money.",
+        "reference_answer": "Accumulation: Fear (sits out). Markup: FOMO (buys late). Distribution: Greed (buys more at top). Markdown: Panic (sells at bottom). This emotional cycle causes buying high and selling low, the opposite of profitable trading.",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "If Bitcoin halved in April 2024, when would you expect the cycle top and why? Total: 100 points | Passing: 80 points End of Unit 1 Comprehensive Test",
+        "reference_answer": "October 2025 - April 2026 (12-18 months after halving). Historically, cycle tops occur 12-18 months post-halving as the supply shock takes effect and pushes prices to a peak before distribution begins.",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      }
+    ]
+  },
+  {
+    "level": "unit",
+    "unit": "unit-02",
+    "title": "Technical Analysis & Cycle Identification",
+    "questions": [
+      {
+        "question": "How are cycles always measured in financial markets?",
+        "reference_answer": "**From cycle low to cycle low**\n\nEvery cycle is measured from one low to the next low, with each low marking both the end of one cycle and the beginning of the next.",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "What pattern do cycle lows typically form, and why?",
+        "reference_answer": "**V-shaped pattern - because the selloff at the end is steep and severe, followed by a sharp rebound**\n\nThe V-pattern occurs due to capitulation selling followed by short covering and buyers rushing back in.",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "What drives the initial thrust higher in a new cycle after a cycle low?",
+        "reference_answer": "**Short covering rally - overleveraged shorts are forced to buy back their positions**\n\nAs price rebounds, traders who sold short on margin must cover (buy back) their positions, creating buying pressure that amplifies the initial recovery.",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "What is the primary use of the 40-week cycle?",
+        "reference_answer": "**Tactical timing for entries and exits within the larger 4-year cycle**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "How many 40-week cycles typically occur in one 4-year cycle?",
+        "reference_answer": "**4-5 complete 40-week cycles**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "In a bull market, what should you do at a 40-week cycle low?",
+        "reference_answer": "**Buy (it's a pullback/buying opportunity)**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "What is the primary purpose of the 60-day cycle?",
+        "reference_answer": "**Execution timing for precise entry and exit points**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "What is the maximum risk you should take per 60-day cycle trade?",
+        "reference_answer": "**1-2% of your account**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "What is a bull trap?",
+        "reference_answer": "**A bullish setup on a smaller timeframe that fails because larger timeframes are bearish**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "What is the first question in the Three-Timeframe Checklist?",
+        "reference_answer": "**What is the 4-year cycle doing? (Phase, trend, position relative to 20-week MA)**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "What does \"translation\" measure?",
+        "reference_answer": "**Where the cycle high occurs relative to the cycle midpoint**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "If a 40-week cycle tops at week 15 (midpoint is week 20), is this right or left-translated?",
+        "reference_answer": "**Left-translated (bearish)**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "What does a shift from right-translated to left-translated cycles signal?",
+        "reference_answer": "**Weakening momentum; potential trend change from bull to bear**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "When all three cycles align at a low during a bull market, what does this represent?",
+        "reference_answer": "**Highest conviction buy setup (triple alignment)**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "What is a failed cycle? ## True/False (5 questions)",
+        "reference_answer": "**When a cycle breaks down and makes a new low before completing (invalidates the previous high)**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "Cycle analysis can predict exact price targets for Bitcoin's next high.",
+        "reference_answer": "**False**\n\nCycles help predict TIMING (when potential highs and lows may occur), not exact price levels. They are a time-based tool, not a price prediction tool.",
+        "type": "true_false",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "You should trade every 60-day cycle low regardless of larger cycle context.",
+        "reference_answer": "**False** (Only trade when all cycles align)",
+        "type": "true_false",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "Right-translated cycles are bullish and suggest continuation.",
+        "reference_answer": "**True**",
+        "type": "true_false",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "During a bear market, 40-week cycle highs are selling/shorting opportunities, not buying opportunities.",
+        "reference_answer": "**True**",
+        "type": "true_false",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "A failed cycle is a strong signal of a trend change. ## Short Answer (5 questions)",
+        "reference_answer": "**True**",
+        "type": "true_false",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "Describe what happens during the \"flip to greed\" phase past a cycle's midpoint. Include specific behaviors and what this signals for traders.",
+        "reference_answer": "**The \"flip to greed\" phase (past midpoint, typically days 30-50):**\n\n**Behaviors:**\n- Participants become excessively leveraged (20x-30x margin)\n- Doubling down on positions despite already having gains\n- Allocating more capital than prudent risk management allows\n- FOMO driving decisions (\"I don't want to miss out\")\n- Social media buzz increases, friends asking about Bitcoin\n- Focus shifts from risk management to maximizing gains\n\n**Psychological drivers:**\n- Greed replaces caution\n- Hearing about others making money triggers action\n- Recent success creates overconfidence\n- Fear of missing additional gains\n\n**What this signals for traders:**\n\n**Warning signs:**\n- The cycle is maturing and approaching its high\n- Risk/reward is deteriorating (late to the party)\n- Market is becoming overleveraged and vulnerable\n- A reversal could trigger cascading liquidations\n\n**Proper response:**\n- If already in: Begin scaling out, taking profits\n- If not in: Wait for next cycle low (don't chase)\n- Reduce leverage immediately\n- Tighten stop-losses to protect existing gains\n- Prepare for the cycle high and subsequent decline\n\n**Why this matters:** Understanding this phase helps you avoid the common mistake of maximum exposure at maximum risk. The best time to be aggressive was at the cycle low; by the greed phase, it's time to be defensive.",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "Explain how to trade a 40-week cycle differently in a bull market vs a bear market.",
+        "reference_answer": "**Bull market:** Buy the 40-week lows (pullbacks), sell/trail at highs. The 4-year trend is up, so lows are opportunities.\n**Bear market:** Sell/short the 40-week highs (rallies), avoid buying lows. The 4-year trend is down, so highs are exits and lows continue lower.",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "Walk through the Three-Timeframe Checklist. What must you confirm at each level before taking a trade?",
+        "reference_answer": "**1. 4-year:** Phase (accumulation/markup/distribution/markdown), trend direction, position vs 20-week MA\n**2. 40-week:** Making higher/lower highs and lows, right/left-translation, at cycle low or high\n**3. 60-day:** At cycle low (entry) or high (exit), reversal pattern, alignment with larger cycles\nAll three must align for high-conviction trades.",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "Why is understanding translation critical for anticipating trend changes?",
+        "reference_answer": "Translation reveals momentum strength. Right-translation = strong momentum, likely continuation. Left-translation = weak momentum, likely reversal. A shift from consecutive right-translated cycles to left-translation is an early warning of a trend change before it's obvious.",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "You see a perfect bullish 60-day setup, but the 4-year cycle is in markdown. What should you do and why? Total: 125 points | Passing: 100 points (80%) End of Unit 2 Comprehensive Test",
+        "reference_answer": "**Stay out.** The 4-year cycle (dominant trend) is bearish. The 60-day bullish setup is a bull trap that will likely fail when it hits resistance from the larger bearish trend. Don't fight the 4-year cycle.",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      }
+    ]
+  },
+  {
+    "level": "unit",
+    "unit": "unit-03",
+    "title": "Investment Strategy",
+    "questions": [
+      {
+        "question": "What is Rule #1 in Bob's framework?",
+        "reference_answer": "**Never fight the 4-year cycle—trade with the trend**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "What is the 1-2% rule?",
+        "reference_answer": "**Risk only 1-2% of your account per trade**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "How do you calculate position size?",
+        "reference_answer": "**Risk amount ÷ distance to stop loss = position size**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "If you risk $1,000 with entry at $50k and stop at $47k, what position size should you use?",
+        "reference_answer": "**0.33 BTC** ($1,000 ÷ $3,000 distance)",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "What should you do when a trade goes against you?",
+        "reference_answer": "**Cut the loss quickly and exit at your stop**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "How many high-conviction trades might you make in a year using Bob's framework?",
+        "reference_answer": "**5-20 trades** (quality over quantity)",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "What does \"cash is a position\" mean?",
+        "reference_answer": "**Being in cash is an active strategic decision, often the best position when no high-probability setup exists**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "What is the cost of overtrading?",
+        "reference_answer": "**Transaction fees, taxes, emotional exhaustion, and lower win rates from taking low-probability setups**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "What is the purpose of keeping a trading journal?",
+        "reference_answer": "**To track performance, learn from mistakes, and improve over time**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "What is the maximum total risk across all open positions?",
+        "reference_answer": "**5-10% of account**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "When should you use leverage?",
+        "reference_answer": "**Sparingly and cautiously (if at all), only on highest-conviction setups**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "What should you do if you've been in cash for 3 months waiting for a setup? ## True/False (4 questions)",
+        "reference_answer": "**Continue waiting patiently until a high-probability setup appears**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "You should trade as frequently as possible to maximize opportunities.",
+        "reference_answer": "**False** (Quality over quantity; wait for aligned setups)",
+        "type": "true_false",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "Position sizing ensures no single trade can destroy your account.",
+        "reference_answer": "**True**",
+        "type": "true_false",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "Being in cash during a bear market is a sign of weakness.",
+        "reference_answer": "**False** (It's disciplined risk management)",
+        "type": "true_false",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "If a trade is going against you, you should move your stop loss further away to avoid getting stopped out. ## Short Answer (4 questions)",
+        "reference_answer": "**False** (Never move stops away; accept the loss and exit)",
+        "type": "true_false",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "Explain why risking only 1-2% per trade is critical. Compare a trader who risks 1% vs 20% after 5 consecutive losses.",
+        "reference_answer": "**1% risk:** After 5 losses = -5% account (survives)\n**20% risk:** After 5 losses = -67% account (catastrophic)\nSmall risk per trade ensures survival through losing streaks, preserves capital for compounding, and prevents psychological collapse.",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "What are three of Bob's top 10 rules and why is each important?",
+        "reference_answer": "**Rule 1:** Never fight the 4-year cycle (prevents catastrophic losses)\n**Rule 2:** Risk 1-2% per trade (ensures survival)\n**Rule 3:** Cut losses quickly, let winners run (small losses + big wins = profitability)\n(Other valid answers include: plan your trade/trade your plan, wait for alignment, be patient, etc.)",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "Explain the costs of overtrading and why it destroys profitability.",
+        "reference_answer": "Transaction fees compound (0.6% × 100 trades = 60% in fees), taxes on every profitable trade, emotional exhaustion from constant decisions, lower win rates from taking low-probability setups. Result: Death by a thousand cuts even with a good strategy.",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "Why can being in cash 50% of the time actually improve your returns? Use a hypothetical scenario. Total: 100 points | Passing: 80 points End of Unit 3 Comprehensive Test",
+        "reference_answer": "By avoiding 70-85% bear market losses and preserving capital, you have more to deploy at lower prices during accumulation. Example: Exit at $60k with $300k → sit in cash during bear → re-enter at $20k with $300k = 15 BTC vs holding 5 BTC through the cycle. Next bull market, 15 BTC × 3x = far better than 5 BTC × 3x.",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      }
+    ]
+  },
+  {
+    "level": "unit",
+    "unit": "unit-04",
+    "title": "Advanced Topics",
+    "questions": [
+      {
+        "question": "What is top-down analysis?",
+        "reference_answer": "**Starting with the largest timeframe (4-year) and working down to smaller timeframes (40-week, 60-day)**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "Why must you start analysis with the 4-year cycle?",
+        "reference_answer": "**It establishes the dominant trend and directional bias**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "What is \"Red Path vs Green Path\"?",
+        "reference_answer": "**Mapping out two possible futures (bullish and bearish) and planning for both**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "What can you control in trading?",
+        "reference_answer": "**Your entry, stop loss, position size, and exit plan**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "What should you do when you realize you're wrong about a trade?",
+        "reference_answer": "**Exit quickly and preserve capital**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "What are the three types of exits?",
+        "reference_answer": "**Stop loss, profit target, trailing stop**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "What is the 3-tranche exit strategy?",
+        "reference_answer": "**Sell 33% at first target, 33% at second target, 34% with trailing stop**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "When should you exit at a 4-year cycle top?",
+        "reference_answer": "**When 3-5 signals confirm: time (18-24 months), price extension, euphoria, left-translation, momentum divergence**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "What is the recommended exit split for a 4-year cycle top?",
+        "reference_answer": "**70% when signals confirm, trail the final 30%**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "When should you stay in cash?",
+        "reference_answer": "**During distribution, markdown, and when no high-probability setup exists**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "How long should you stay in cash after a 4-year cycle top?",
+        "reference_answer": "**12-18 months (through distribution and markdown phases)**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "What is the goal when exiting at a cycle top? ## True/False (4 questions)",
+        "reference_answer": "**Avoid riding the bear market down 70-85%, not to sell at the exact top**",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "You can successfully trade 60-day cycles without checking the 4-year cycle.",
+        "reference_answer": "**False** (You need larger timeframe context to avoid traps)",
+        "type": "true_false",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "Scenario planning (Red/Green Path) removes emotion by pre-deciding actions for both outcomes.",
+        "reference_answer": "**True**",
+        "type": "true_false",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "Scaling out in tranches allows you to lock in profits while still participating in upside.",
+        "reference_answer": "**True**",
+        "type": "true_false",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "You should try to sell at the exact top of the 4-year cycle. ## Short Answer (4 questions)",
+        "reference_answer": "**False** (Goal is to exit near the top and avoid the bear market)",
+        "type": "true_false",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "Explain the top-down analysis process. What do you check at each timeframe?",
+        "reference_answer": "**1. 4-year:** Phase, trend direction, position vs 20-week MA → Establishes directional bias\n**2. 40-week:** Higher/lower highs and lows, right/left translation, cycle position → Tactical timing\n**3. 60-day:** Cycle low/high, reversal pattern, alignment → Exact entry/exit\nStart top-down to avoid trading small timeframes against the dominant trend.",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "Explain the Red Path vs Green Path framework and how it removes emotion from trading.",
+        "reference_answer": "Before entering, map both scenarios: **Green (bullish):** price levels that confirm continuation, actions if it happens. **Red (bearish):** price levels that confirm reversal, actions if it happens. By pre-deciding both paths, you execute mechanically when one triggers, eliminating paralysis and emotional decision-making.",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "Explain the 3-tranche exit strategy. Include percentages, targets, and purpose for each tranche.",
+        "reference_answer": "**Tranche 1 (33%):** Conservative target (2x), locks in safe profit\n**Tranche 2 (33%):** Moderate target (2.5-3x), captures expected move\n**Tranche 3 (34%):** Aggressive target or trail, catches parabolic extensions\nThis balances profit-taking with letting winners run, removing all-or-nothing pressure.",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      },
+      {
+        "question": "Explain why staying in cash for 12-18 months after a 4-year cycle top can lead to better returns than holding. Use a numerical example. Total: 100 points | Passing: 80 points End of Unit 4 Comprehensive Test ## 🎉 COMPLETE TEST SUITE FINISHED! 🎉 All tests created: - 13 Chapter Tests - 4 Unit Comprehensive Tests - Total: 17 complete test files covering the entire Bob Loukas textbook",
+        "reference_answer": "**Hold strategy:** 1 BTC from $20k → ride to $70k → hold through crash to $15k = still 1 BTC worth $15k (-25% from entry)\n**Cash strategy:** 1 BTC from $20k → exit at $65k → cash during bear → re-enter at $18k with $65k = 3.61 BTC\nNext bull to $70k: Holder has $70k, Cash strategy has $252k (3.6x better)\nAvoiding the 78% loss and re-entering lower multiplies your Bitcoin stack.",
+        "type": "open",
+        "options": null,
+        "correct_option": null
+      }
+    ]
+  }
+]
