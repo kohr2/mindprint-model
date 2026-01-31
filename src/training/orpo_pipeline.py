@@ -503,7 +503,7 @@ class DPOPipeline:
             progress.training_time_seconds = time.time() - start_time
             return progress
 
-def _should_mark_failed(self, progress: TopicProgress) -> bool:
+    def _should_mark_failed(self, progress: TopicProgress) -> bool:
         """Check if topic should be marked as failed."""
         return progress.retry_count >= self.config.max_retries_per_topic
 
