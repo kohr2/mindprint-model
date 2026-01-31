@@ -41,14 +41,15 @@ try:
     # Import backend implementations to trigger registration
     try:
         import src.backends.pytorch  # noqa
-    except ImportError:
-        pass
+    except ImportError as e:
+        print(f"Warning: PyTorch backend import failed: {e}")
     try:
         import src.backends.mlx  # noqa
-    except ImportError:
-        pass
+    except ImportError as e:
+        print(f"Warning: MLX backend import failed: {e}")
     BACKENDS_AVAILABLE = True
-except ImportError:
+except ImportError as e:
+    print(f"Warning: Backend framework not available: {e}")
     BACKENDS_AVAILABLE = False
     BackendProtocol = None
 
@@ -262,7 +263,14 @@ def main():
         config.output_dir = args.output_dir
 
     # Determine mode
+    # ORPO training requires backend mode - enforce it
     use_backend = config.backend_type is not None and BACKENDS_AVAILABLE
+
+    # If ORPO is configured but backends not available, that's an error
+    if not use_backend and config.backend_type is not None:
+        logger.error("ORPO training requires backend support, but backends are not available")
+        logger.error("Please ensure MLX or PyTorch backend dependencies are installed")
+        return 1
 
     # Dry run - just print config
     if args.dry_run:
