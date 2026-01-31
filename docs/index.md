@@ -4,7 +4,7 @@ Production-grade RLHF fine-tuning system for creating personalized language mode
 
 ## Features
 
-- **State-of-the-art training**: SimPO, ORPO, DPO loss functions
+- **State-of-the-art training**: ORPO (Odds Ratio Preference Optimization) single-stage training
 - **Multiple backends**: MLX (Apple Silicon) and PyTorch (CUDA)
 - **Production ready**: CI/CD, comprehensive testing, experiment tracking
 - **Clean architecture**: Modular, testable, maintainable codebase

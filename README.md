@@ -1,10 +1,10 @@
 # Mindprint RLHF Fine-Tuning
 
-RLHF (Reinforcement Learning from Human Feedback) fine-tuning system for creating personalized language models using DPO (Direct Preference Optimization) and SFT (Supervised Fine-Tuning) with LoRA adapters.
+RLHF (Reinforcement Learning from Human Feedback) fine-tuning system for creating personalized language models using ORPO (Odds Ratio Preference Optimization) with LoRA adapters.
 
 ## Features
 
-- **State-of-the-Art Training**: SimPO, ORPO, DPO loss functions with modern techniques
+- **State-of-the-Art Training**: ORPO (Odds Ratio Preference Optimization) for single-stage training
 - **Multi-Backend Support**: Train with PyTorch (CUDA/CPU) or MLX (Apple Silicon)
 - **Clean Architecture**: Modular, testable, production-ready codebase
 - **Comprehensive Testing**: Unit, integration, property-based, and benchmark tests
@@ -51,30 +51,18 @@ pip install mlx mlx-lm
 
 ### Basic Training
 
-**Recommended: SimPO (best quality/speed tradeoff)**
+**ORPO Training (Odds Ratio Preference Optimization)**
 
 ```bash
-# Train with MLX backend (Mac Studio) using SimPO
+# Train with MLX backend (Mac Studio)
 python scripts/run_orpo_training.py \
   --config configs/training_pipeline.yaml \
-  --backend mlx \
-  --loss-type simpo
-```
+  --backend mlx
 
-**Other options:**
-
-```bash
-# DPO (standard, requires reference model)
+# Train with PyTorch backend (Cloud GPU)
 python scripts/run_orpo_training.py \
   --config configs/training_pipeline.yaml \
-  --backend mlx \
-  --loss-type dpo
-
-# ORPO (single-stage, fastest)
-python scripts/run_orpo_training.py \
-  --config configs/training_pipeline.yaml \
-  --backend mlx \
-  --loss-type orpo
+  --backend pytorch --data-dir ./data/bob_loukas/transcripts
 ```
 
 ### Configuration
@@ -92,37 +80,20 @@ backend:
 model:
   name: Qwen/Qwen2.5-7B-Instruct
 
-# Training configuration
-training:
-  loss_type: simpo  # "dpo", "simpo", "orpo"
-  warmup_ratio: 0.1
-  gradient_accumulation_steps: 8
-  neftune_noise_alpha: 5.0
-
-# SFT configuration
-sft:
-  epochs_per_topic: 3
-  learning_rate: 3e-4
+# ORPO configuration
+orpo:
+  steps_per_topic: 100
+  learning_rate: 0.0003  # 3e-4
   batch_size: 4
-  lora_rank: 32  # Increased from 8 for better quality
-  lora_alpha: 64  # Typically 2x rank
-  lora_dropout: 0.05
-  target_modules:  # All linear layers
+  lambda_orpo: 0.1  # Weight for preference term
+  lora_rank: 8
+  lora_alpha: 16
+  target_modules:
     - q_proj
-    - k_proj
     - v_proj
     - o_proj
-    - gate_proj
     - up_proj
     - down_proj
-
-# DPO/SimPO configuration
-preference:
-  loss_type: simpo  # "dpo", "simpo"
-  steps_per_topic: 100
-  learning_rate: 5e-7
-  beta: 2.0  # SimPO beta (or 0.1 for DPO)
-  gamma: 0.5  # SimPO margin
 ```
 
 ## Supported Models
@@ -147,7 +118,7 @@ For detailed model specifications and training recommendations, see [docs/models
 The project uses a backend abstraction layer to support multiple ML frameworks:
 
 ```
-Application Layer (DPOPipeline, CLI)
+Application Layer (ORPOPipeline, CLI)
          ↓
 Backend Interface (BackendProtocol, ModelInterface, TrainerInterface)
          ↓
@@ -161,7 +132,7 @@ Backend    (Mac Studio)
 **Key Components**:
 - **BackendProtocol**: Defines the interface all backends must implement
 - **ModelInterface**: Unified model wrapper for both PyTorch and MLX
-- **TrainerInterface**: Unified trainer interface for SFT and DPO
+- **TrainerInterface**: Unified trainer interface for ORPO training
 - **AdapterManager**: Handles LoRA adapter operations
 
 ### Directory Structure
@@ -176,14 +147,12 @@ mindprint-model/
 │   │   ├── trainer_interface.py # Trainer abstraction
 │   │   ├── pytorch/           # PyTorch implementation
 │   │   │   ├── backend.py
-│   │   │   ├── sft_trainer.py
-│   │   │   └── dpo_trainer.py
+│   │   │   └── pytorch_orpo_trainer.py
 │   │   └── mlx/               # MLX implementation
 │   │       ├── backend.py
-│   │       ├── sft_trainer.py
-│   │       └── dpo_trainer.py
+│   │       └── mlx_orpo_trainer.py
 │   ├── training/              # Training pipelines
-│   │   └── dpo_pipeline.py    # DPO training pipeline
+│   │   └── orpo_pipeline.py   # ORPO training pipeline
 │   ├── data/                  # Data loading and processing
 │   ├── evaluation/            # Evaluation and metrics
 │   └── utils/                 # Shared utilities
@@ -226,17 +195,22 @@ MLX (Apple's ML framework) provides a stable alternative for Mac Studio training
 
 ## Training Pipeline
 
-### DPO Pipeline
+### ORPO Pipeline
 
-The DPO (Direct Preference Optimization) pipeline consists of:
+The ORPO (Odds Ratio Preference Optimization) pipeline combines SFT and preference alignment in a single training stage:
 
 1. **Data Preparation**: Load preference pairs (chosen vs rejected responses)
-2. **SFT Phase**: Supervised fine-tuning on chosen responses
-3. **DPO Phase**: Optimize model to prefer chosen over rejected responses
-4. **Evaluation**: Assess voice fidelity and preference alignment
+2. **ORPO Training**: Single-stage optimization combining NLL loss (SFT) and odds ratio loss (preference)
+3. **Evaluation**: Assess voice fidelity and preference alignment
+
+Key advantages over two-stage SFT+DPO:
+- **Faster**: Single training stage instead of two
+- **Better Quality**: Often produces better instruction following
+- **No Reference Model**: Unlike DPO, doesn't require reference model
+- **Simpler Pipeline**: Fewer hyperparameters to tune
 
 ```python
-from src.training.dpo_pipeline import DPOPipeline, PipelineConfig
+from src.training.orpo_pipeline import DPOPipeline, PipelineConfig
 from src.backends import create_backend
 
 # Create backend
@@ -245,8 +219,8 @@ backend = create_backend("mlx", device="auto")
 # Configure pipeline
 config = PipelineConfig(
     backend_type="mlx",
-    sft_epochs_per_topic=3,
-    dpo_steps_per_topic=100,
+    orpo_steps_per_topic=100,
+    lambda_orpo=0.1,  # Balance between NLL and OR loss
 )
 
 # Initialize pipeline
@@ -263,7 +237,7 @@ result = pipeline.train_curriculum()
 
 ### Curriculum Learning
 
-Train across multiple topics progressively:
+Train across multiple topics progressively with ORPO:
 
 ```python
 topics = [
@@ -273,15 +247,13 @@ topics = [
 ]
 
 for topic_id in topics:
-    # SFT: Learn topic knowledge
-    sft_result = pipeline.train_sft_on_topic(topic_id)
-
-    # DPO: Align preferences
-    dpo_result = pipeline.train_dpo_on_topic(topic_id)
+    # ORPO: Combined SFT + preference alignment in single stage
+    orpo_result = pipeline.train_orpo_on_topic(topic_id)
 
     # Evaluate
     score = pipeline.evaluate_voice_fidelity(topic_id)
     print(f"Topic {topic_id} voice score: {score:.2f}")
+    print(f"ORPO loss: {orpo_result.loss:.4f}")
 ```
 
 ## Evaluation
@@ -305,7 +277,9 @@ score = calculate_voice_fidelity(
 
 ### Metrics
 
-- **Training Loss**: Cross-entropy (SFT) or DPO loss
+- **Training Loss**: ORPO loss (combined NLL + odds ratio loss)
+  - NLL Loss: Cross-entropy on chosen responses
+  - Odds Ratio Loss: Preference alignment loss
 - **Voice Fidelity**: Semantic similarity to reference style
 - **Preference Accuracy**: Model's ability to prefer chosen responses
 - **Perplexity**: Model confidence on held-out data
@@ -447,10 +421,9 @@ See [MLX Real-World Testing Guide](docs/MLX_REAL_WORLD_TESTING.md) for detailed 
    @register_backend("my_backend")
    class MyBackend(BackendProtocol):
        def load_model(self, model_path): ...
-       def create_sft_trainer(self, model, config): ...
-       def create_dpo_trainer(self, model, ref_model, config): ...
+       def create_orpo_trainer(self, model, config): ...
    ```
-3. Implement trainers and model wrapper
+3. Implement ORPO trainer and model wrapper
 4. Add tests
 5. Update documentation
 
@@ -465,20 +438,20 @@ See [MLX Real-World Testing Guide](docs/MLX_REAL_WORLD_TESTING.md) for detailed 
 
 ### Benchmarks
 
-**Qwen2.5-7B**:
+**Qwen2.5-7B** (ORPO):
 
-| Backend | Device | SFT Time/Epoch | DPO Time/100 steps | Memory Usage |
-|---------|--------|----------------|-------------------|--------------|
-| PyTorch | CUDA (A100) | 45 min | 12 min | 24 GB |
-| PyTorch | CPU | 8 hours | 2 hours | 16 GB |
-| MLX | M2 Ultra | 2 hours | 30 min | 32 GB unified |
+| Backend | Device | ORPO Time/100 steps | Memory Usage |
+|---------|--------|-------------------|--------------|
+| PyTorch | CUDA (A100) | 15 min | 24 GB |
+| PyTorch | CPU | 2 hours | 16 GB |
+| MLX | M2 Ultra | 45 min | 32 GB unified |
 
-**Qwen2.5-72B** (with INT4 quantization):
+**Qwen2.5-72B** (with INT4 quantization, ORPO):
 
-| Backend | Device | SFT Time/Topic | DPO Time/Topic | Memory Usage |
-|---------|--------|----------------|----------------|--------------|
-| MLX | M2 Ultra (64GB) | 6-8 hours | 8-10 hours | 44-48 GB unified |
-| PyTorch | 8x H100 80GB | 2-3 hours | 3-4 hours | ~500 GB (distributed) |
+| Backend | Device | ORPO Time/Topic | Memory Usage |
+|---------|--------|----------------|--------------|
+| MLX | M2 Ultra (64GB) | 6-8 hours | 44-48 GB unified |
+| PyTorch | 8x H100 80GB | 2-3 hours | ~500 GB (distributed) |
 
 *Note: Times are approximate and depend on dataset size, batch size, and sequence length.*
 
@@ -550,7 +523,7 @@ See [DEPLOYMENT.md](docs/DEPLOYMENT.md) for detailed troubleshooting.
 
 - Based on [Transformers](https://github.com/huggingface/transformers)
 - Uses [PEFT](https://github.com/huggingface/peft) for LoRA
-- Uses [TRL](https://github.com/huggingface/trl) for DPO (PyTorch)
+- ORPO approach from [OpenRLHF](https://github.com/OpenRLHF/OpenRLHF)
 - Uses [MLX](https://github.com/ml-explore/mlx) for Apple Silicon
 
 ## Contact
