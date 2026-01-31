@@ -186,7 +186,7 @@ class LoRAMerger:
         Merge multiple adapters incrementally.
 
         This is useful for combining adapters trained on different phases
-        (e.g., SFT adapter + DPO adapter).
+        (e.g., ORPO adapter from different units).
 
         Args:
             adapter_paths: List of adapter paths to merge in order

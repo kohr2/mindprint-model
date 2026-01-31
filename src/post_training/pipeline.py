@@ -29,7 +29,7 @@ class PostTrainingConfig:
     adapter_path: str
     quiz_data_path: str
     output_dir: str
-    approach: str = "dpo"
+    approach: str = "orpo"
     skip_evaluation: bool = False
     export_safetensors: bool = True
     export_gguf: bool = True
