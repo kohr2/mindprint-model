@@ -136,7 +136,7 @@ class MLXBackend(BackendProtocol):
             logger.error(f"Failed to load model from {model_path}: {e}")
             raise
 
-def create_orpo_trainer(
+    def create_orpo_trainer(
         self,
         model: ModelInterface,
         config: Dict[str, Any],
