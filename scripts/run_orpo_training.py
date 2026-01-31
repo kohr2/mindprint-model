@@ -112,23 +112,20 @@ def load_config(config_path: str) -> Tuple[PipelineConfig, str]:
     backend_dtype = backend_config.get("dtype", "float16")
 
     # Map YAML structure to PipelineConfig
+    orpo_config = config_dict.get("orpo", {})
+
     config = PipelineConfig(
-        # Backend settings (for new backend system)
+        # Backend settings
         backend_type=backend_type,
         backend_device=backend_device,
         backend_dtype=backend_dtype,
-        # SFT settings
-        sft_epochs_per_topic=config_dict.get("sft", {}).get("epochs_per_topic", 3),
-        sft_learning_rate=config_dict.get("sft", {}).get("learning_rate", 3e-4),
-        sft_batch_size=config_dict.get("sft", {}).get("batch_size", 4),
-        # DPO settings
-        dpo_steps_per_topic=config_dict.get("dpo", {}).get("steps_per_topic", 100),
-        dpo_learning_rate=config_dict.get("dpo", {}).get("learning_rate", 5e-7),
-        dpo_batch_size=config_dict.get("dpo", {}).get("batch_size", 2),
-        dpo_beta=config_dict.get("dpo", {}).get("beta", 0.1),
+        # ORPO settings
+        orpo_steps_per_topic=orpo_config.get("steps_per_topic", 100),
+        orpo_learning_rate=orpo_config.get("learning_rate", 3e-4),
+        orpo_batch_size=orpo_config.get("batch_size", 4),
+        orpo_lambda=orpo_config.get("lambda_orpo", 0.1),
         # Thresholds
         accuracy_threshold=config_dict.get("thresholds", {}).get("accuracy_threshold", 0.70),
-        dpo_trigger_threshold=config_dict.get("thresholds", {}).get("dpo_trigger_threshold", 0.75),
         topic_pass_threshold=config_dict.get("thresholds", {}).get("topic_pass_threshold", 0.90),
         # Pipeline control
         merge_after_unit=config_dict.get("pipeline", {}).get("merge_after_unit", True),
@@ -199,7 +196,7 @@ def load_model_and_tokenizer(
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description="Run SFT + DPO training pipeline for Bob Loukas mindprint"
+        description="Run ORPO training pipeline for Bob Loukas mindprint"
     )
     parser.add_argument(
         "--config",
@@ -276,10 +273,11 @@ def main():
             logger.info(f"Backend type: {config.backend_type}")
             logger.info(f"Backend device: {config.backend_device}")
             logger.info(f"Backend dtype: {config.backend_dtype}")
-        logger.info(f"SFT epochs/topic: {config.sft_epochs_per_topic}")
-        logger.info(f"DPO steps/topic: {config.dpo_steps_per_topic}")
+        logger.info(f"ORPO steps/topic: {config.orpo_steps_per_topic}")
+        logger.info(f"ORPO learning rate: {config.orpo_learning_rate}")
+        logger.info(f"ORPO batch size: {config.orpo_batch_size}")
+        logger.info(f"ORPO lambda: {config.orpo_lambda}")
         logger.info(f"Accuracy threshold: {config.accuracy_threshold}")
-        logger.info(f"DPO trigger threshold: {config.dpo_trigger_threshold}")
         logger.info(f"Topic pass threshold: {config.topic_pass_threshold}")
         logger.info(f"Data dir: {config.data_dir}")
         logger.info(f"Output dir: {config.output_dir}")

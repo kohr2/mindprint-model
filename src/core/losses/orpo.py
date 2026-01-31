@@ -53,22 +53,27 @@ class ORPOLoss(BaseLoss):
         logits: Any,
         chosen_ids: Any,
         rejected_ids: Any,
+        rejected_logits: Any = None,
         **kwargs
     ) -> LossOutput:
         """
         Compute ORPO loss.
         
         Args:
-            logits: Model logits [batch, seq_len, vocab_size]
+            logits: Model logits for chosen responses [batch, seq_len, vocab_size]
             chosen_ids: Token IDs for chosen responses
             rejected_ids: Token IDs for rejected responses
+            rejected_logits: Model logits for rejected responses [batch, seq_len, vocab_size]
+                If None, uses logits (for backward compatibility, but not recommended)
         
         Returns:
             LossOutput with ORPO loss and metrics
         """
         # Compute log probabilities for chosen and rejected
         chosen_logps = self._compute_log_probs(logits, chosen_ids)
-        rejected_logps = self._compute_log_probs(logits, rejected_ids)
+        # Use rejected_logits if provided, otherwise use chosen logits (not ideal but backward compatible)
+        rejected_logits_to_use = rejected_logits if rejected_logits is not None else logits
+        rejected_logps = self._compute_log_probs(rejected_logits_to_use, rejected_ids)
         
         # NLL loss (SFT component) - only on chosen
         nll_loss = -chosen_logps.mean()

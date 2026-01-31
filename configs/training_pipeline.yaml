@@ -1,6 +1,6 @@
 # Training Pipeline Configuration
 # Bob Loukas Mindprint - Mac Studio M2 Ultra (64GB)
-# Combined SFT + DPO training with evaluation
+# ORPO (Odds Ratio Preference Optimization) training
 
 # Backend configuration (optional - defaults to legacy mode if not specified)
 backend:
@@ -14,37 +14,26 @@ model:
   dtype: float16
   device: mps
 
-# SFT settings
-sft:
-  epochs_per_topic: 3
+# ORPO settings - Odds Ratio Preference Optimization
+# ORPO combines supervised fine-tuning and preference alignment in a single stage
+orpo:
+  steps_per_topic: 100
   learning_rate: 0.0003  # 3e-4
   batch_size: 4
+  lambda_orpo: 0.1  # Weight for preference term
   lora_rank: 8
   lora_alpha: 16
   target_modules:
     - q_proj
     - v_proj
     - o_proj
-
-# DPO settings
-dpo:
-  steps_per_topic: 100
-  learning_rate: 0.0000005  # 5e-7
-  batch_size: 2
-  beta: 0.1
-  lora_rank: 1
-  lora_alpha: 1.0
-  target_modules:
-    - o_proj
-    - v_proj
     - up_proj
     - down_proj
 
 # Thresholds
 thresholds:
-  accuracy_threshold: 0.70  # Trigger DPO if SFT accuracy below this
-  dpo_trigger_threshold: 0.70  # Trigger DPO if voice score below this
-  topic_pass_threshold: 0.70  # Topic passes if score above this
+  accuracy_threshold: 0.70  # Min accuracy to pass
+  topic_pass_threshold: 0.90  # Combined score (accuracy + voice) / 2 to pass topic
 
 # Pipeline control
 pipeline:

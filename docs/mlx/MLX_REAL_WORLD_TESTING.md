@@ -97,7 +97,7 @@ cd ~/mindprint-model
 
 Or manually:
 ```bash
-python3 scripts/run_dpo_training.py \
+python3 scripts/run_orpo_training.py \
     --config configs/training_pipeline.yaml \
     --backend mlx \
     --model Qwen/Qwen2.5-7B-Instruct \
@@ -148,7 +148,7 @@ Once single-topic test succeeds, run full curriculum:
 
 ```bash
 # On Mac Studio
-python3 scripts/run_dpo_training.py \
+python3 scripts/run_orpo_training.py \
     --config configs/training_pipeline.yaml \
     --backend mlx \
     --model Qwen/Qwen2.5-7B-Instruct \

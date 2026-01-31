@@ -1,8 +1,9 @@
 """
-MLX DPO Trainer - Direct Preference Optimization with MLX.
+MLX ORPO Trainer - Odds Ratio Preference Optimization with MLX.
 
-Implements DPO training with manual DPO loss computation (Bradley-Terry model)
-since MLX doesn't have a TRL equivalent.
+Implements ORPO training with manual ORPO loss computation.
+ORPO combines SFT and preference alignment in a single stage,
+eliminating the need for a reference model.
 """
 
 from typing import List, Dict, Any, Optional
@@ -11,7 +12,7 @@ import logging
 import time
 import random
 
-from ..trainer_interface import DPOTrainerInterface, TrainingResult
+from ..trainer_interface import ORPOTrainerInterface, TrainingResult
 from ..model_interface import ModelInterface
 from .mlx_model import MLXModel
 from .mlx_device_manager import MLXDeviceManager
@@ -20,11 +21,12 @@ from .mlx_adapter_manager import MLXAdapterManager
 logger = logging.getLogger(__name__)
 
 
-class MLXDPOTrainer(DPOTrainerInterface):
+class MLXORPOTrainer(ORPOTrainerInterface):
     """
-    MLX implementation of DPOTrainerInterface.
+    MLX implementation of ORPOTrainerInterface.
 
-    Implements DPO training with manual Bradley-Terry loss computation.
+    Implements ORPO training with manual odds ratio loss computation.
+    No reference model needed - ORPO combines SFT and preference alignment.
     """
 
     def __init__(
@@ -33,34 +35,31 @@ class MLXDPOTrainer(DPOTrainerInterface):
         config: Dict[str, Any],
         device_manager: MLXDeviceManager,
         adapter_manager: MLXAdapterManager,
-        ref_model: Optional[ModelInterface] = None,
     ):
         """
-        Initialize MLX DPO trainer.
+        Initialize MLX ORPO trainer.
 
         Args:
             model: Policy model to train (must be MLXModel)
             config: Training configuration dict
             device_manager: Device manager for this backend
             adapter_manager: Adapter manager for this backend
-            ref_model: Optional reference model (must be MLXModel if provided)
 
         Raises:
-            TypeError: If model or ref_model is not an MLXModel
+            TypeError: If model is not an MLXModel
         """
         if not isinstance(model, MLXModel):
             raise TypeError(f"Expected MLXModel, got {type(model)}")
 
-        if ref_model is not None and not isinstance(ref_model, MLXModel):
-            raise TypeError(f"Expected MLXModel for ref_model, got {type(ref_model)}")
-
         self._mlx_model = model
-        self._mlx_ref_model = ref_model
         self._device_manager = device_manager
         self._adapter_manager = adapter_manager
         self._config = config
 
-        logger.info("Initialized MLXDPOTrainer")
+        # Track training stats
+        self._training_stats: Dict[str, Any] = {}
+
+        logger.info("Initialized MLXORPOTrainer")
 
     def _compute_log_probs(
         self,
@@ -94,7 +93,6 @@ class MLXDPOTrainer(DPOTrainerInterface):
         shift_labels = labels[..., 1:]
 
         # Gather log probs at label indices
-        # For each position, get log_prob of the true label
         batch_size, seq_len, vocab_size = shift_log_probs.shape
         flat_log_probs = shift_log_probs.reshape(-1, vocab_size)
         flat_labels = shift_labels.reshape(-1)
@@ -109,44 +107,9 @@ class MLXDPOTrainer(DPOTrainerInterface):
 
         return log_probs_sum
 
-    def _dpo_loss(
-        self,
-        policy_chosen_logps: Any,
-        policy_rejected_logps: Any,
-        ref_chosen_logps: Any,
-        ref_rejected_logps: Any,
-        beta: float = 0.1,
-    ) -> Any:
-        """
-        Compute DPO loss using Bradley-Terry model.
-
-        Args:
-            policy_chosen_logps: Log probs of chosen responses from policy model
-            policy_rejected_logps: Log probs of rejected responses from policy model
-            ref_chosen_logps: Log probs of chosen responses from reference model
-            ref_rejected_logps: Log probs of rejected responses from reference model
-            beta: KL penalty coefficient
-
-        Returns:
-            DPO loss
-        """
-        import mlx.core as mx
-
-        # Compute log ratios
-        policy_logratios = policy_chosen_logps - policy_rejected_logps
-        ref_logratios = ref_chosen_logps - ref_rejected_logps
-
-        # DPO loss: -log(sigmoid(beta * (policy_logratios - ref_logratios)))
-        logits = beta * (policy_logratios - ref_logratios)
-
-        # Use log-sigmoid for numerical stability
-        loss = -mx.mean(mx.logaddexp(0, -logits))  # -log(sigmoid(x))
-
-        return loss
-
     def train(self, train_data: List[Dict[str, Any]]) -> TrainingResult:
         """
-        Train with DPO on preference pairs.
+        Train with ORPO on preference pairs.
 
         Args:
             train_data: List of dicts with "prompt", "chosen", "rejected" keys
@@ -159,6 +122,7 @@ class MLXDPOTrainer(DPOTrainerInterface):
         try:
             import mlx.core as mx
             import mlx.optimizers as optim
+            from src.core.losses import ORPOLoss, ORPOConfig
 
             if not train_data:
                 return TrainingResult(
@@ -170,19 +134,14 @@ class MLXDPOTrainer(DPOTrainerInterface):
                 )
 
             # Extract config
-            learning_rate = self._config.get("learning_rate", 5e-7)
+            learning_rate = self._config.get("learning_rate", 3e-4)
             max_steps = self._config.get("max_steps", 100)
-            batch_size = self._config.get("per_device_batch_size", 2)
-            beta = self._config.get("beta", 0.1)
+            batch_size = self._config.get("per_device_batch_size", 4)
+            lambda_orpo = self._config.get("lambda_orpo", 0.1)
             max_length = self._config.get("max_length", 1024)
 
-            # Get models
+            # Get model and tokenizer
             policy_model = self._mlx_model.get_underlying_model()
-            ref_model = (
-                self._mlx_ref_model.get_underlying_model()
-                if self._mlx_ref_model
-                else policy_model  # Use same model as reference
-            )
             tokenizer = self._mlx_model.tokenizer
 
             # Setup optimizer
@@ -191,16 +150,20 @@ class MLXDPOTrainer(DPOTrainerInterface):
                 weight_decay=0.01,
             )
 
+            # Initialize ORPO loss
+            orpo_loss_fn = ORPOLoss(ORPOConfig(lambda_orpo=lambda_orpo))
+
             # Training loop
             logger.info(
-                f"Starting DPO training: {len(train_data)} pairs, "
-                f"{max_steps} steps, beta={beta}, lr={learning_rate}"
+                f"Starting ORPO training: {len(train_data)} pairs, "
+                f"{max_steps} steps, lambda_orpo={lambda_orpo}, lr={learning_rate}"
             )
 
             total_loss = 0.0
             steps_completed = 0
-            chosen_rewards_sum = 0.0
-            rejected_rewards_sum = 0.0
+            nll_losses = []
+            or_losses = []
+            accuracies = []
 
             for step in range(max_steps):
                 # Sample batch randomly
@@ -236,39 +199,23 @@ class MLXDPOTrainer(DPOTrainerInterface):
                 chosen_ids = mx.array(chosen_encoded["input_ids"])
                 rejected_ids = mx.array(rejected_encoded["input_ids"])
 
-                # Compute reference model log probs first (no gradients needed)
-                # In MLX, gradients are only computed when explicitly requested via value_and_grad
-                ref_chosen_logps = self._compute_log_probs(
-                    ref_model, chosen_ids, chosen_ids
-                )
-                ref_rejected_logps = self._compute_log_probs(
-                    ref_model, rejected_ids, rejected_ids
-                )
-                # Force evaluation of reference model outputs (MLX is lazy)
-                mx.eval(ref_chosen_logps, ref_rejected_logps)
-
-                # Define loss function for policy model (gradients will be computed)
+                # Define loss function for policy model
                 def loss_fn(model):
-                    # Policy model log probs
-                    policy_chosen_logps = self._compute_log_probs(
-                        model, chosen_ids, chosen_ids
-                    )
-                    policy_rejected_logps = self._compute_log_probs(
-                        model, rejected_ids, rejected_ids
-                    )
+                    # Forward pass for chosen and rejected
+                    chosen_logits = model(chosen_ids)
+                    rejected_logits = model(rejected_ids)
 
-                    # Compute DPO loss
-                    loss = self._dpo_loss(
-                        policy_chosen_logps,
-                        policy_rejected_logps,
-                        ref_chosen_logps,
-                        ref_rejected_logps,
-                        beta=beta,
+                    # Compute ORPO loss
+                    loss_output = orpo_loss_fn.compute(
+                        logits=chosen_logits,  # For chosen responses
+                        chosen_ids=chosen_ids,
+                        rejected_ids=rejected_ids,
+                        rejected_logits=rejected_logits,  # For rejected responses
                     )
 
-                    return loss
+                    return loss_output.loss
 
-                # Compute loss and gradients (only for policy model)
+                # Compute loss and gradients
                 loss, grads = mx.value_and_grad(loss_fn)(policy_model)
 
                 # Skip if loss is NaN
@@ -282,18 +229,48 @@ class MLXDPOTrainer(DPOTrainerInterface):
                 # Force evaluation
                 mx.eval(policy_model.parameters())
 
+                # Compute metrics for logging
+                chosen_logits_eval = policy_model(chosen_ids)
+                rejected_logits_eval = policy_model(rejected_ids)
+                loss_output = orpo_loss_fn.compute(
+                    logits=chosen_logits_eval,
+                    chosen_ids=chosen_ids,
+                    rejected_ids=rejected_ids,
+                    rejected_logits=rejected_logits_eval,
+                )
+                mx.eval(loss_output.loss)
+
                 total_loss += loss.item()
                 steps_completed += 1
 
+                # Store metrics
+                metrics = loss_output.metrics
+                nll_losses.append(metrics.get("nll_loss", 0.0))
+                or_losses.append(metrics.get("or_loss", 0.0))
+                accuracies.append(metrics.get("accuracy", 0.0))
+
                 if (step + 1) % 10 == 0:
                     avg_loss = total_loss / steps_completed
-                    logger.info(f"Step {step + 1}/{max_steps}, Loss: {avg_loss:.4f}")
+                    avg_accuracy = sum(accuracies[-10:]) / min(10, len(accuracies))
+                    logger.info(
+                        f"Step {step + 1}/{max_steps}, Loss: {avg_loss:.4f}, "
+                        f"Accuracy: {avg_accuracy:.4f}"
+                    )
 
             final_loss = total_loss / steps_completed if steps_completed > 0 else 0.0
             training_time = time.time() - start_time
 
+            # Store training stats
+            self._training_stats = {
+                "final_loss": final_loss,
+                "nll_loss": sum(nll_losses) / len(nll_losses) if nll_losses else 0.0,
+                "or_loss": sum(or_losses) / len(or_losses) if or_losses else 0.0,
+                "accuracy": sum(accuracies) / len(accuracies) if accuracies else 0.0,
+                "steps_completed": steps_completed,
+            }
+
             logger.info(
-                f"DPO training complete: loss={final_loss:.4f}, "
+                f"ORPO training complete: loss={final_loss:.4f}, "
                 f"time={training_time:.1f}s"
             )
 
@@ -302,13 +279,11 @@ class MLXDPOTrainer(DPOTrainerInterface):
                 final_loss=final_loss,
                 training_time_seconds=training_time,
                 samples_trained=steps_completed,
-                metrics={
-                    "steps_completed": steps_completed,
-                },
+                metrics=self._training_stats,
             )
 
         except Exception as e:
-            logger.error(f"DPO training failed: {e}")
+            logger.error(f"ORPO training failed: {e}", exc_info=True)
             return TrainingResult(
                 success=False,
                 final_loss=0.0,
@@ -332,19 +307,19 @@ class MLXDPOTrainer(DPOTrainerInterface):
         Returns:
             TrainingResult with training outcome
         """
-        logger.info(f"MLX DPO training on topic: {topic_id}")
+        logger.info(f"MLX ORPO training on topic: {topic_id}")
         result = self.train(topic_data)
 
         if result.success:
             logger.info(
-                f"Topic {topic_id} DPO complete: loss={result.final_loss:.4f}"
+                f"Topic {topic_id} ORPO complete: loss={result.final_loss:.4f}"
             )
 
         return result
 
     def save_adapter(self, path: Path) -> Path:
         """
-        Save the DPO LoRA adapter.
+        Save the ORPO LoRA adapter.
 
         Args:
             path: Directory to save adapter
@@ -352,7 +327,7 @@ class MLXDPOTrainer(DPOTrainerInterface):
         Returns:
             Path to saved adapter
         """
-        logger.info(f"Saving DPO adapter to {path}")
+        logger.info(f"Saving ORPO adapter to {path}")
         self._mlx_model.save_adapter(path)
         return path
 
@@ -361,18 +336,9 @@ class MLXDPOTrainer(DPOTrainerInterface):
         Get the trained policy model.
 
         Returns:
-            MLXModel with trained DPO adapter
+            MLXModel with trained ORPO adapter
         """
         return self._mlx_model
-
-    def get_ref_model(self) -> Optional[ModelInterface]:
-        """
-        Get the reference model.
-
-        Returns:
-            MLXModel reference model, or None if not provided
-        """
-        return self._mlx_ref_model
 
     def get_config(self) -> Dict[str, Any]:
         """
@@ -383,36 +349,12 @@ class MLXDPOTrainer(DPOTrainerInterface):
         """
         return self._config
 
-    def get_training_stats(self) -> Dict[str, Any]:
+    def get_orpo_stats(self) -> Dict[str, Any]:
         """
-        Get training statistics.
+        Get ORPO-specific statistics.
 
         Returns:
-            Dictionary with training stats (losses, rewards, etc.)
+            Dictionary with ORPO loss components (NLL loss, odds ratio loss),
+            accuracy, odds margins, etc.
         """
-        # Return empty dict for now - could be populated during training
-        return {}
-
-    def get_reference_model(self) -> ModelInterface:
-        """
-        Get the reference model used for DPO.
-
-        Returns:
-            ModelInterface instance of reference model
-        """
-        if self._mlx_ref_model is None:
-            # If no reference model was provided, return the policy model
-            # (which will be frozen during DPO training)
-            return self._mlx_model
-        return self._mlx_ref_model
-
-    def get_dpo_stats(self) -> Dict[str, Any]:
-        """
-        Get DPO-specific statistics.
-
-        Returns:
-            Dictionary with rewards, accuracies, margins, etc.
-        """
-        # Delegate to get_training_stats for now
-        # This could be enhanced to track actual DPO metrics during training
-        return self.get_training_stats()
+        return self._training_stats.copy()

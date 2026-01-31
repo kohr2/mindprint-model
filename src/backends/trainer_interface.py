@@ -1,8 +1,8 @@
 """
 Trainer Interface - Abstract interface for trainers across backends.
 
-Provides unified API for SFT, DPO, and reward model training that works
-with both PyTorch (TRL, PEFT) and MLX implementations.
+Provides unified API for ORPO training that works
+with both PyTorch and MLX implementations.
 """
 
 from abc import ABC, abstractmethod
@@ -45,7 +45,7 @@ class TrainerInterface(ABC):
     Abstract interface for trainers across backends.
 
     This interface abstracts away framework-specific training implementations,
-    allowing the DPO pipeline to work with PyTorch (TRL) or MLX trainers.
+    allowing the ORPO pipeline to work with PyTorch or MLX trainers.
     """
 
     @abstractmethod
@@ -58,8 +58,7 @@ class TrainerInterface(ABC):
 
         Args:
             train_data: List of training examples
-                For SFT: [{"instruction": str, "input": str, "output": str}, ...]
-                For DPO: [{"prompt": str, "chosen": str, "rejected": str}, ...]
+                For ORPO: [{"prompt": str, "chosen": str, "rejected": str}, ...]
 
         Returns:
             TrainingResult with metrics and status
@@ -118,47 +117,22 @@ class TrainerInterface(ABC):
         ...
 
 
-class SFTTrainerInterface(TrainerInterface):
+class ORPOTrainerInterface(TrainerInterface):
     """
-    Interface for Supervised Fine-Tuning trainers.
+    Interface for ORPO (Odds Ratio Preference Optimization) trainers.
 
-    Extends TrainerInterface with SFT-specific methods.
-    """
-
-    @abstractmethod
-    def get_training_stats(self) -> Dict[str, Any]:
-        """
-        Get training statistics.
-
-        Returns:
-            Dictionary with loss curves, learning rates, etc.
-        """
-        ...
-
-
-class DPOTrainerInterface(TrainerInterface):
-    """
-    Interface for DPO (Direct Preference Optimization) trainers.
-
-    Extends TrainerInterface with DPO-specific methods.
+    Extends TrainerInterface with ORPO-specific methods.
+    ORPO combines SFT and preference alignment in a single stage,
+    eliminating the need for a reference model.
     """
 
     @abstractmethod
-    def get_reference_model(self) -> "ModelInterface":
+    def get_orpo_stats(self) -> Dict[str, Any]:
         """
-        Get the reference model used for DPO.
+        Get ORPO-specific statistics.
 
         Returns:
-            ModelInterface instance of reference model
-        """
-        ...
-
-    @abstractmethod
-    def get_dpo_stats(self) -> Dict[str, Any]:
-        """
-        Get DPO-specific statistics.
-
-        Returns:
-            Dictionary with rewards, accuracies, margins, etc.
+            Dictionary with ORPO loss components (NLL loss, odds ratio loss),
+            accuracy, odds margins, etc.
         """
         ...

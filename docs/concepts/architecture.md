@@ -67,7 +67,7 @@ CLI → Pipeline → Adapter → Core → Adapter → Pipeline → Output
 
 Example:
 ```
-run_dpo_training.py
+run_orpo_training.py
   → TrainingPipeline
     → MLXTrainer (adapter)
       → SimPOLoss (core)

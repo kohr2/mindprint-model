@@ -59,7 +59,7 @@ echo "  tail -f logs/training_*.log"
 echo ""
 
 # Run training
-python3 scripts/run_dpo_training.py \
+python3 scripts/run_orpo_training.py \
     --config "$CONFIG_FILE" \
     --backend mlx \
     --model "$MODEL" \

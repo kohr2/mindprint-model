@@ -136,123 +136,32 @@ class MLXBackend(BackendProtocol):
             logger.error(f"Failed to load model from {model_path}: {e}")
             raise
 
-    def create_sft_trainer(
+def create_orpo_trainer(
         self,
         model: ModelInterface,
         config: Dict[str, Any],
     ) -> TrainerInterface:
         """
-        Create an SFT (Supervised Fine-Tuning) trainer.
-
-        Args:
-            model: Model to train (must be MLXModel)
-            config: Training configuration dict
-
-        Returns:
-            MLXSFTTrainer instance
-
-        Raises:
-            TypeError: If model is not an MLXModel
-        """
-        from .mlx_sft_trainer import MLXSFTTrainer
-        from ..adapter_interface import AdapterConfig
-        from src.models.config import get_model_config
-
-        if not isinstance(model, MLXModel):
-            raise TypeError(f"Expected MLXModel, got {type(model)}")
-
-        # Add LoRA adapter if not already present
-        if not model.has_adapter():
-            # Get model name from model_path or config
-            model_name = getattr(model, '_model_path', None) or config.get('model_name', 'qwen-7b')
-            
-            # Map HuggingFace model name to config name
-            model_name = self._map_model_name(model_name)
-            
-            try:
-                model_cfg = get_model_config(model_name)
-                
-                adapter_config = AdapterConfig(
-                    r=model_cfg.lora.r,
-                    alpha=model_cfg.lora.alpha,
-                    dropout=model_cfg.lora.dropout,
-                    target_modules=model_cfg.lora.target_modules,
-                )
-                
-                logger.info(f"Adding LoRA adapter: rank={adapter_config.r}, alpha={adapter_config.alpha}")
-                model = self._adapter_manager.add_adapter(model, adapter_config)
-            except (KeyError, AttributeError) as e:
-                logger.warning(f"Could not load model config for {model_name}: {e}")
-                logger.warning("Using default LoRA config")
-                # Fallback to default config
-                adapter_config = AdapterConfig(
-                    r=8,
-                    alpha=16.0,
-                    dropout=0.05,
-                    target_modules=["q_proj", "v_proj", "o_proj", "up_proj", "down_proj"],
-                )
-                model = self._adapter_manager.add_adapter(model, adapter_config)
-
-        logger.info("Creating MLX SFT trainer")
-        return MLXSFTTrainer(
-            model, config, self._device_manager, self._adapter_manager
-        )
-
-    def _map_model_name(self, model_path: str) -> str:
-        """
-        Map HuggingFace model path to internal config name.
-        
-        Args:
-            model_path: HuggingFace model identifier (e.g., "Qwen/Qwen2.5-7B-Instruct")
-            
-        Returns:
-            Internal model config name (e.g., "qwen-7b")
-        """
-        model_lower = model_path.lower()
-        
-        # Map common patterns
-        if "qwen" in model_lower:
-            if "72" in model_lower or "72b" in model_lower:
-                return "qwen-72b"
-            else:
-                return "qwen-7b"
-        elif "gemma" in model_lower:
-            return "gemma-12b"
-        else:
-            # Default fallback
-            return "qwen-7b"
-
-    def create_dpo_trainer(
-        self,
-        model: ModelInterface,
-        config: Dict[str, Any],
-        ref_model: Optional[ModelInterface] = None,
-    ) -> TrainerInterface:
-        """
-        Create a DPO (Direct Preference Optimization) trainer.
+        Create an ORPO (Odds Ratio Preference Optimization) trainer.
 
         Args:
             model: Policy model to train (must be MLXModel)
-            config: DPO configuration dict
-            ref_model: Optional reference model (defaults to copy of model)
+            config: ORPO configuration dict
 
         Returns:
-            MLXDPOTrainer instance
+            MLXORPOTrainer instance
 
         Raises:
             TypeError: If model is not an MLXModel
         """
-        from .mlx_dpo_trainer import MLXDPOTrainer
+        from .mlx_orpo_trainer import MLXORPOTrainer
 
         if not isinstance(model, MLXModel):
             raise TypeError(f"Expected MLXModel, got {type(model)}")
 
-        if ref_model is not None and not isinstance(ref_model, MLXModel):
-            raise TypeError(f"Expected MLXModel for ref_model, got {type(ref_model)}")
-
-        logger.info("Creating MLX DPO trainer")
-        return MLXDPOTrainer(
-            model, config, self._device_manager, self._adapter_manager, ref_model
+        logger.info("Creating MLX ORPO trainer")
+        return MLXORPOTrainer(
+            model, config, self._device_manager, self._adapter_manager
         )
 
     def get_device_manager(self) -> MLXDeviceManager:

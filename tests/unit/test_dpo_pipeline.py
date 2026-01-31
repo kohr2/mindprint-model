@@ -1,10 +1,10 @@
 """
-Tests for DPOPipeline - SFT + DPO Training Orchestration.
+Tests for ORPOPipeline - ORPO Training Orchestration.
 
 Tests cover:
 - Pipeline configuration
 - Topic/Unit/Chapter progress tracking
-- SFT → Eval → DPO decision logic
+- ORPO training logic
 - Checkpoint save/resume
 - Unit merge triggers
 """
@@ -20,7 +20,7 @@ from typing import Dict, List
 
 import torch
 
-from src.training.dpo_pipeline import (
+from src.training.orpo_pipeline import (
     TopicStatus,
     PipelineConfig,
     TopicProgress,

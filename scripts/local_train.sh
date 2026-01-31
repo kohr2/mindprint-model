@@ -58,8 +58,8 @@ if [ ! -f "configs/training_pipeline.yaml" ]; then
 fi
 
 # Check if Python script exists
-if [ ! -f "scripts/run_dpo_training.py" ]; then
-    echo "❌ Error: Training script not found: scripts/run_dpo_training.py"
+if [ ! -f "scripts/run_orpo_training.py" ]; then
+    echo "❌ Error: Training script not found: scripts/run_orpo_training.py"
     exit 1
 fi
 
@@ -96,7 +96,7 @@ fi
 
 # Kill any existing training processes
 echo "🛑 Stopping any existing training processes..."
-pkill -f run_dpo_training || true
+pkill -f run_orpo_training || true
 sleep 2
 
 # Start training with MLX backend
@@ -105,7 +105,7 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 LOG_FILE="logs/training_${TIMESTAMP}.log"
 
 # Build command with optional arguments
-TRAIN_CMD="python3 scripts/run_dpo_training.py --config configs/training_pipeline.yaml --backend mlx"
+TRAIN_CMD="python3 scripts/run_orpo_training.py --config configs/training_pipeline.yaml --backend mlx"
 [ -n "$DATA_DIR" ] && TRAIN_CMD="$TRAIN_CMD --data-dir $DATA_DIR"
 [ -n "$MODEL_NAME" ] && TRAIN_CMD="$TRAIN_CMD --model $MODEL_NAME"
 

@@ -12,7 +12,7 @@ Mindprint Model supports multiple training approaches:
 ### With SimPO (Recommended)
 
 ```bash
-python scripts/run_dpo_training.py \
+python scripts/run_orpo_training.py \
     --config configs/training_pipeline.yaml \
     --backend mlx \
     --loss-type simpo
@@ -21,7 +21,7 @@ python scripts/run_dpo_training.py \
 ### With DPO
 
 ```bash
-python scripts/run_dpo_training.py \
+python scripts/run_orpo_training.py \
     --config configs/training_pipeline.yaml \
     --backend mlx \
     --loss-type dpo
@@ -30,7 +30,7 @@ python scripts/run_dpo_training.py \
 ### With ORPO (Single-stage)
 
 ```bash
-python scripts/run_dpo_training.py \
+python scripts/run_orpo_training.py \
     --config configs/training_pipeline.yaml \
     --backend mlx \
     --loss-type orpo

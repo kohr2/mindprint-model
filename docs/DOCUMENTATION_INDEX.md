@@ -115,8 +115,8 @@ Complete index of mindprint-model documentation organized by topic.
 
 | Task | Documentation | Command |
 |------|---------------|---------|
-| Train with MLX | [User Guide](user-guide/training.md) | `python scripts/run_dpo_training.py --backend mlx` |
-| Train with SimPO | [User Guide](user-guide/training.md) | `python scripts/run_dpo_training.py --loss-type simpo` |
+| Train with MLX | [User Guide](user-guide/training.md) | `python scripts/run_orpo_training.py --backend mlx` |
+| Train with SimPO | [User Guide](user-guide/training.md) | `python scripts/run_orpo_training.py --loss-type simpo` |
 | Evaluate model | [Evaluation Guide](TRANSCRIPTS_EVALUATION.md) | `./scripts/local_evaluate.sh` |
 | Monitor training | [User Guide](user-guide/training.md) | `./scripts/local_monitor.sh` |
 | Troubleshoot MLX | [Troubleshooting](mlx/MLX_BACKEND_TROUBLESHOOTING.md) | See troubleshooting guide |

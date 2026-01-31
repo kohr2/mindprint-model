@@ -1,8 +1,8 @@
 """
 PyTorch Backend - Main backend implementation for PyTorch/transformers.
 
-Implements the BackendProtocol for PyTorch-based training with
-transformers, PEFT, and TRL libraries.
+Implements the BackendProtocol for PyTorch-based ORPO training with
+transformers and PEFT libraries.
 """
 
 from typing import Any, Dict, Optional
@@ -25,8 +25,7 @@ class PyTorchBackend(BackendProtocol):
     """
     PyTorch implementation of BackendProtocol.
 
-    Uses transformers for model loading, PEFT for LoRA adapters,
-    and TRL for DPO training.
+    Uses transformers for model loading and PEFT for LoRA adapters.
     """
 
     def __init__(self, config: BackendConfig):
@@ -178,64 +177,31 @@ class PyTorchBackend(BackendProtocol):
             logger.error(f"Failed to load model from {model_path}: {e}")
             raise
 
-    def create_sft_trainer(
+    def create_orpo_trainer(
         self,
         model: ModelInterface,
         config: Dict[str, Any],
     ) -> TrainerInterface:
         """
-        Create an SFT (Supervised Fine-Tuning) trainer.
+        Create an ORPO (Odds Ratio Preference Optimization) trainer.
 
         Args:
             model: Model to train (must be PyTorchModel)
-            config: Training configuration dict
+            config: ORPO training configuration dict
 
         Returns:
-            PyTorchSFTTrainer instance
+            PyTorchORPOTrainer instance
 
         Raises:
             TypeError: If model is not a PyTorchModel
+            NotImplementedError: If PyTorch ORPO trainer is not yet available
         """
-        from .pytorch_sft_trainer import PyTorchSFTTrainer
-
         if not isinstance(model, PyTorchModel):
             raise TypeError(f"Expected PyTorchModel, got {type(model)}")
 
-        logger.info("Creating SFT trainer")
-        return PyTorchSFTTrainer(model, config, self._device_manager, self._adapter_manager)
-
-    def create_dpo_trainer(
-        self,
-        model: ModelInterface,
-        config: Dict[str, Any],
-        ref_model: Optional[ModelInterface] = None,
-    ) -> TrainerInterface:
-        """
-        Create a DPO (Direct Preference Optimization) trainer.
-
-        Args:
-            model: Policy model to train (must be PyTorchModel)
-            config: DPO configuration dict
-            ref_model: Optional reference model (defaults to copy of model)
-
-        Returns:
-            PyTorchDPOTrainer instance
-
-        Raises:
-            TypeError: If model is not a PyTorchModel
-        """
-        from .pytorch_dpo_trainer import PyTorchDPOTrainer
-
-        if not isinstance(model, PyTorchModel):
-            raise TypeError(f"Expected PyTorchModel, got {type(model)}")
-
-        if ref_model is not None and not isinstance(ref_model, PyTorchModel):
-            raise TypeError(f"Expected PyTorchModel for ref_model, got {type(ref_model)}")
-
-        logger.info("Creating DPO trainer")
-        return PyTorchDPOTrainer(
-            model, config, self._device_manager, self._adapter_manager, ref_model
-        )
+        logger.info("Creating ORPO trainer")
+        # TODO: Implement PyTorchORPOTrainer
+        raise NotImplementedError("PyTorch ORPO trainer implementation is pending")
 
     def get_device_manager(self) -> PyTorchDeviceManager:
         """

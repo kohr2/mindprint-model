@@ -1,10 +1,10 @@
 """
-Integration tests for DPOPipeline with backend interface.
+Integration tests for ORPOPipeline with backend interface.
 """
 
 import pytest
 from src.backends import create_backend
-from src.training.dpo_pipeline import DPOPipeline, PipelineConfig
+from src.training.orpo_pipeline import DPOPipeline, PipelineConfig
 
 
 @pytest.mark.skip(reason="Requires model loading - slow integration test")

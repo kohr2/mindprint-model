@@ -13,7 +13,7 @@ python scripts/run_data_prep.py \
 ### 2. Train with SimPO (Recommended)
 
 ```bash
-python scripts/run_dpo_training.py \
+python scripts/run_orpo_training.py \
     --config configs/training_pipeline.yaml \
     --backend mlx \
     --loss-type simpo

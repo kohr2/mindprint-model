@@ -1,13 +1,12 @@
 """
-DPOPipeline - SFT + DPO Training Orchestration.
+DPOPipeline (ORPO-only) - ORPO Training Orchestration.
 
-Orchestrates the full training pipeline:
-1. SFT training on each topic (3 epochs)
+Orchestrates the ORPO training pipeline:
+1. ORPO training on each topic (combined SFT + preference alignment)
 2. Evaluation (accuracy + voice fidelity)
-3. DPO refinement if needed (accuracy >= 0.70 but voice < 0.75)
-4. Merge adapters after each unit
+3. Merge adapters after each unit
 
-Optimized for Mac Studio M2 Ultra (MPS backend, fp16).
+Optimized for Mac Studio M2 Ultra (MPS backend, fp16) and PyTorch backends.
 """
 
 from dataclasses import dataclass, field
@@ -23,8 +22,6 @@ import traceback
 import torch
 from transformers import PreTrainedModel, PreTrainedTokenizer
 
-from .sft_trainer import SFTTrainer, SFTConfig
-from .dpo_trainer import Rank1DPOTrainer, Rank1DPOConfig
 from .mps_utils import mps_empty_cache
 from src.evaluation.voice_evaluator import QuizEvaluator
 
@@ -50,37 +47,29 @@ class TopicStatus(Enum):
     """Status of topic training progress."""
 
     PENDING = "pending"
-    SFT_COMPLETE = "sft_complete"
-    EVAL_PASSED = "eval_passed"
-    DPO_NEEDED = "dpo_needed"
-    DPO_COMPLETE = "dpo_complete"
-    PASSED = "passed"
-    FAILED = "failed"
+    ORPO_COMPLETE = "orpo_complete"  # ORPO training complete
+    EVAL_PASSED = "eval_passed"  # Evaluation passed
+    PASSED = "passed"  # Topic passed all checks
+    FAILED = "failed"  # Topic failed
 
 
 @dataclass
 class PipelineConfig:
-    """Configuration for the DPO training pipeline."""
+    """Configuration for the ORPO training pipeline."""
 
-    # Backend settings (optional - defaults to direct PyTorch usage)
+    # Backend settings
     backend_type: Optional[str] = None  # "pytorch", "mlx", or None for legacy mode
     backend_device: str = "auto"  # "auto", "mps", "cuda", "cpu", "gpu"
     backend_dtype: str = "float16"  # "float16", "float32", "bfloat16"
 
-    # SFT settings
-    sft_epochs_per_topic: int = 3
-    sft_learning_rate: float = 3e-4
-    sft_batch_size: int = 4
-
-    # DPO settings
-    dpo_steps_per_topic: int = 100
-    dpo_learning_rate: float = 5e-7
-    dpo_batch_size: int = 2
-    dpo_beta: float = 0.1
+    # ORPO settings - Odds Ratio Preference Optimization
+    orpo_steps_per_topic: int = 100
+    orpo_learning_rate: float = 3e-4
+    orpo_batch_size: int = 4
+    orpo_lambda: float = 0.1  # Weight for preference term
 
     # Thresholds
-    accuracy_threshold: float = 0.70  # Min accuracy to try DPO
-    dpo_trigger_threshold: float = 0.75  # Voice < this triggers DPO
+    accuracy_threshold: float = 0.70  # Min accuracy to pass
     topic_pass_threshold: float = 0.90  # Combined score to pass
 
     # Pipeline control
@@ -103,8 +92,7 @@ class TopicProgress:
     accuracy_score: float = 0.0
     voice_score: float = 0.0
     retry_count: int = 0
-    sft_loss: float = 0.0
-    dpo_loss: float = 0.0
+    orpo_loss: float = 0.0  # ORPO training loss
     training_time_seconds: float = 0.0
 
     def to_dict(self) -> Dict:
@@ -115,8 +103,7 @@ class TopicProgress:
             "accuracy_score": self.accuracy_score,
             "voice_score": self.voice_score,
             "retry_count": self.retry_count,
-            "sft_loss": self.sft_loss,
-            "dpo_loss": self.dpo_loss,
+            "orpo_loss": self.orpo_loss,
             "training_time_seconds": self.training_time_seconds,
         }
 
@@ -408,16 +395,15 @@ class DPOPipeline:
 
     def train_topic(self, topic_data: Dict) -> TopicProgress:
         """
-        Train a single topic with SFT and optional DPO.
+        Train a single topic with ORPO (single-stage training).
 
         Flow:
-        1. Run SFT training
+        1. Run ORPO training (combines SFT + preference alignment)
         2. Evaluate accuracy and voice
-        3. If accuracy >= 0.70 and voice < 0.75, run DPO
-        4. Final evaluation
+        3. Pass/Fail determination
 
         Args:
-            topic_data: Topic data with sft_data and preference_pairs
+            topic_data: Topic data with preference_pairs (ORPO only needs preference pairs)
 
         Returns:
             TopicProgress with training outcome
@@ -433,60 +419,50 @@ class DPOPipeline:
         )
 
         try:
-            # 1. SFT Training
+            # 1. ORPO Training (single-stage, replaces SFT+DPO)
+            preference_pairs = topic_data.get("preference_pairs", [])
+            
+            if not preference_pairs:
+                logger.warning(f"No preference pairs found for topic {topic_id}, skipping")
+                progress.status = TopicStatus.FAILED
+                progress.training_time_seconds = time.time() - start_time
+                return progress
+
             if self.use_backend:
                 # Backend mode: use backend interface
-                sft_config_dict = {
-                    "learning_rate": self.config.sft_learning_rate,
-                    "num_epochs": self.config.sft_epochs_per_topic,
-                    "per_device_batch_size": self.config.sft_batch_size,
+                orpo_config_dict = {
+                    "learning_rate": self.config.orpo_learning_rate,
+                    "max_steps": self.config.orpo_steps_per_topic,
+                    "per_device_batch_size": self.config.orpo_batch_size,
+                    "lambda_orpo": self.config.orpo_lambda,
                     "output_dir": self.config.output_dir,
+                    "max_length": 1024,
                 }
-                sft_trainer = self.backend.create_sft_trainer(self.model, sft_config_dict)
+                orpo_trainer = self.backend.create_orpo_trainer(self.model, orpo_config_dict)
 
-                sft_result = sft_trainer.train_on_topic(
-                    topic_data.get("sft_data", []),
+                orpo_result = orpo_trainer.train_on_topic(
+                    preference_pairs,
                     topic_id,
                 )
 
-                if not sft_result.success:
+                if not orpo_result.success:
                     progress.status = TopicStatus.FAILED
                     progress.training_time_seconds = time.time() - start_time
                     return progress
 
-                progress.status = TopicStatus.SFT_COMPLETE
-                progress.sft_loss = sft_result.final_loss
-                self.model = sft_trainer.get_model()
-                logger.info("SFT complete (backend mode)")
+                progress.status = TopicStatus.ORPO_COMPLETE
+                progress.orpo_loss = orpo_result.final_loss
+                self.model = orpo_trainer.get_model()
+                logger.info(f"ORPO complete (backend mode): loss={orpo_result.final_loss:.4f}")
 
             else:
-                # Legacy mode: use direct PyTorch trainers
-                sft_config = SFTConfig(
-                    learning_rate=self.config.sft_learning_rate,
-                    num_epochs=self.config.sft_epochs_per_topic,
-                    per_device_batch_size=self.config.sft_batch_size,
-                )
-                sft_trainer = SFTTrainer(self.model, self.tokenizer, sft_config)
+                # Legacy mode not supported for ORPO - ORPO requires backend
+                logger.error("ORPO training requires backend mode. Legacy PyTorch mode not supported.")
+                progress.status = TopicStatus.FAILED
+                progress.training_time_seconds = time.time() - start_time
+                return progress
 
-                sft_result = sft_trainer.train_on_topic(
-                    topic_data.get("sft_data", []),
-                    topic_id,
-                )
-
-                if not sft_result.success:
-                    progress.status = TopicStatus.FAILED
-                    progress.training_time_seconds = time.time() - start_time
-                    return progress
-
-                progress.status = TopicStatus.SFT_COMPLETE
-                progress.sft_loss = sft_result.final_loss
-
-                # Keep SFT adapter for DPO (no merge/unload to avoid corruption)
-                # DPO will continue training the same adapter
-                self.model = sft_trainer.get_model()
-                logger.info("Keeping SFT adapter for DPO training (no merge)")
-
-            # Clear MPS cache
+            # Clear cache
             if self.use_backend:
                 self.backend.get_device_manager().empty_cache()
             else:
@@ -497,65 +473,7 @@ class DPOPipeline:
             progress.accuracy_score = eval_result.get("accuracy", 0.0)
             progress.voice_score = eval_result.get("voice_score", 0.0)
 
-            # 3. Check if DPO is needed
-            if self._should_run_dpo(eval_result):
-                progress.status = TopicStatus.DPO_NEEDED
-                logger.info(
-                    f"Topic {topic_id}: accuracy={progress.accuracy_score:.2f}, "
-                    f"voice={progress.voice_score:.2f} → Running DPO"
-                )
-
-                # Run DPO
-                if self.use_backend:
-                    # Backend mode
-                    dpo_config_dict = {
-                        "learning_rate": self.config.dpo_learning_rate,
-                        "max_steps": self.config.dpo_steps_per_topic,
-                        "per_device_batch_size": self.config.dpo_batch_size,
-                        "beta": self.config.dpo_beta,
-                        "output_dir": self.config.output_dir,
-                    }
-                    dpo_trainer = self.backend.create_dpo_trainer(
-                        self.model, dpo_config_dict
-                    )
-
-                    dpo_result = dpo_trainer.train_on_topic(
-                        topic_data.get("preference_pairs", []),
-                        topic_id,
-                    )
-
-                    if dpo_result.success:
-                        progress.status = TopicStatus.DPO_COMPLETE
-                        progress.dpo_loss = dpo_result.final_loss
-                        self.model = dpo_trainer.get_model()
-                else:
-                    # Legacy mode
-                    dpo_config = Rank1DPOConfig(
-                        learning_rate=self.config.dpo_learning_rate,
-                        max_steps=self.config.dpo_steps_per_topic,
-                        per_device_batch_size=self.config.dpo_batch_size,
-                        beta=self.config.dpo_beta,
-                    )
-                    dpo_trainer = Rank1DPOTrainer(
-                        self.model, self.tokenizer, dpo_config
-                    )
-
-                    dpo_result = dpo_trainer.train_on_topic(
-                        topic_data.get("preference_pairs", []),
-                        topic_id,
-                    )
-
-                    if dpo_result.success:
-                        progress.status = TopicStatus.DPO_COMPLETE
-                        progress.dpo_loss = dpo_result.final_loss
-                        self.model = dpo_trainer.get_model()
-
-                # Re-evaluate after DPO
-                eval_result = self._evaluate_topic(topic_data)
-                progress.accuracy_score = eval_result.get("accuracy", 0.0)
-                progress.voice_score = eval_result.get("voice_score", 0.0)
-
-            # 4. Final pass/fail determination
+            # 3. Final pass/fail determination
             combined_score = (progress.accuracy_score + progress.voice_score) / 2
             if combined_score >= self.config.topic_pass_threshold:
                 progress.status = TopicStatus.PASSED
@@ -563,26 +481,17 @@ class DPOPipeline:
                 # Check retry count
                 if progress.retry_count < self.config.max_retries_per_topic:
                     progress.retry_count += 1
-                    # Could trigger retry here, but for now just mark as needing it
-                    progress.status = TopicStatus.DPO_NEEDED
+                    # Mark as failed but allow retry
+                    progress.status = TopicStatus.FAILED
                 else:
                     progress.status = TopicStatus.FAILED
 
             progress.training_time_seconds = time.time() - start_time
 
-            # TEMPORARY: Skip merging between topics to avoid corruption on MPS
-            # Just keep the adapted model with LoRA for next topic
-            # This means we'll have incremental adapters stacking, but at least
-            # we can test if SFT-only training works
-            from peft import PeftModel
-            if isinstance(self.model, PeftModel):
-                logger.info("Keeping adapted model for next topic (no merge/unload to avoid MPS corruption)")
-                # Model stays as-is with adapter attached
-                mps_empty_cache()
-
             logger.info(
                 f"Topic {topic_id} complete: status={progress.status.value}, "
-                f"accuracy={progress.accuracy_score:.2f}, voice={progress.voice_score:.2f}"
+                f"accuracy={progress.accuracy_score:.2f}, voice={progress.voice_score:.2f}, "
+                f"orpo_loss={progress.orpo_loss:.4f}"
             )
 
             return progress
@@ -594,29 +503,7 @@ class DPOPipeline:
             progress.training_time_seconds = time.time() - start_time
             return progress
 
-    def _should_run_dpo(self, eval_result: Dict) -> bool:
-        """
-        Determine if DPO training is needed.
-
-        DPO runs when:
-        - Accuracy >= accuracy_threshold (model knows the content)
-        - Voice < dpo_trigger_threshold (but doesn't sound like Bob)
-
-        Args:
-            eval_result: Dict with accuracy and voice_score
-
-        Returns:
-            True if DPO should run
-        """
-        accuracy = eval_result.get("accuracy", 0.0)
-        voice_score = eval_result.get("voice_score", 0.0)
-
-        accuracy_ok = accuracy >= self.config.accuracy_threshold
-        voice_low = voice_score < self.config.dpo_trigger_threshold
-
-        return accuracy_ok and voice_low
-
-    def _should_mark_failed(self, progress: TopicProgress) -> bool:
+def _should_mark_failed(self, progress: TopicProgress) -> bool:
         """Check if topic should be marked as failed."""
         return progress.retry_count >= self.config.max_retries_per_topic
 

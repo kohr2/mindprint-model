@@ -55,7 +55,7 @@ pip install mlx mlx-lm
 
 ```bash
 # Train with MLX backend (Mac Studio) using SimPO
-python scripts/run_dpo_training.py \
+python scripts/run_orpo_training.py \
   --config configs/training_pipeline.yaml \
   --backend mlx \
   --loss-type simpo
@@ -65,13 +65,13 @@ python scripts/run_dpo_training.py \
 
 ```bash
 # DPO (standard, requires reference model)
-python scripts/run_dpo_training.py \
+python scripts/run_orpo_training.py \
   --config configs/training_pipeline.yaml \
   --backend mlx \
   --loss-type dpo
 
 # ORPO (single-stage, fastest)
-python scripts/run_dpo_training.py \
+python scripts/run_orpo_training.py \
   --config configs/training_pipeline.yaml \
   --backend mlx \
   --loss-type orpo

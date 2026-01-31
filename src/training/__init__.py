@@ -1,8 +1,7 @@
 """
-Training module for Bob Loukas mindprint RLHF.
+Training module for Bob Loukas mindprint ORPO.
 
-Shared infrastructure from 'shared' branch + DPO-specific components.
-Contains LoRA adapter merging, training utilities, MPS support, and DPO trainer.
+Contains LoRA adapter merging, training utilities, MPS support, and ORPO pipeline.
 """
 
 from .merge import MergeConfig, MergeResult, LoRAMerger
@@ -14,7 +13,6 @@ from .mps_utils import (
     check_mps_operation_support,
     MPSTrainingContext,
 )
-from .sft_trainer import SFTConfig, SFTResult, SFTDataset, SFTTrainer
 from .reward_model import (
     RewardConfig,
     RewardResult,
@@ -27,8 +25,7 @@ from .adapter_utils import (
     parse_topic_id,
 )
 from .data_quality import DataQualityMetrics
-from .dpo_trainer import Rank1DPOConfig, DPOResult, Rank1DPOTrainer
-from .dpo_pipeline import (
+from .orpo_pipeline import (
     TopicStatus,
     PipelineConfig,
     TopicProgress,
@@ -48,10 +45,6 @@ __all__ = [
     "move_to_device",
     "check_mps_operation_support",
     "MPSTrainingContext",
-    "SFTConfig",
-    "SFTResult",
-    "SFTDataset",
-    "SFTTrainer",
     "RewardConfig",
     "RewardResult",
     "RewardModel",
@@ -60,9 +53,6 @@ __all__ = [
     "get_merged_adapter_path",
     "parse_topic_id",
     "DataQualityMetrics",
-    "Rank1DPOConfig",
-    "DPOResult",
-    "Rank1DPOTrainer",
     "TopicStatus",
     "PipelineConfig",
     "TopicProgress",

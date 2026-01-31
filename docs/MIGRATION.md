@@ -543,7 +543,7 @@ For migration help:
 
 1. Check [src/backends/README.md](../src/backends/README.md) for API docs
 2. See examples in `tests/integration/`
-3. Test backends individually using `scripts/run_dpo_training.py` with `--backend` flag
+3. Test backends individually using `scripts/run_orpo_training.py` with `--backend` flag
 4. Open GitHub issue if you encounter problems
 
 ---

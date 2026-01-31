@@ -16,7 +16,7 @@ Production-grade RLHF fine-tuning system for creating personalized language mode
 pip install -e .
 
 # Train a model
-python scripts/run_dpo_training.py \
+python scripts/run_orpo_training.py \
     --config configs/training_pipeline.yaml \
     --backend mlx
 ```

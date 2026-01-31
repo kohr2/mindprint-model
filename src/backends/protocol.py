@@ -2,7 +2,7 @@
 Backend Protocol - Core abstraction for multiple ML frameworks.
 
 Defines the interface that all backends (PyTorch, MLX, etc.) must implement
-to support SFT, DPO, and reward model training with LoRA adapters.
+to support ORPO training with LoRA adapters.
 """
 
 from typing import Protocol, Any, Dict, Optional
@@ -82,39 +82,20 @@ class BackendProtocol(Protocol):
         """
         ...
 
-    def create_sft_trainer(
+    def create_orpo_trainer(
         self,
         model: "ModelInterface",
         config: Dict[str, Any],
     ) -> "TrainerInterface":
         """
-        Create an SFT (Supervised Fine-Tuning) trainer.
+        Create an ORPO (Odds Ratio Preference Optimization) trainer.
 
         Args:
             model: Model to train
-            config: Training configuration (learning rate, batch size, etc.)
+            config: ORPO configuration (learning rate, batch size, lambda_orpo, etc.)
 
         Returns:
-            TrainerInterface for SFT training
-        """
-        ...
-
-    def create_dpo_trainer(
-        self,
-        model: "ModelInterface",
-        config: Dict[str, Any],
-        ref_model: Optional["ModelInterface"] = None,
-    ) -> "TrainerInterface":
-        """
-        Create a DPO (Direct Preference Optimization) trainer.
-
-        Args:
-            model: Policy model to train
-            config: DPO configuration (beta, learning rate, etc.)
-            ref_model: Optional reference model (defaults to copy of model)
-
-        Returns:
-            TrainerInterface for DPO training
+            TrainerInterface for ORPO training
         """
         ...
 
