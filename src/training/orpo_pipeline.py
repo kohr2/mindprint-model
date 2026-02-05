@@ -76,6 +76,13 @@ class PipelineConfig:
     merge_after_unit: bool = True
     max_retries_per_topic: int = 2
 
+    # Early stopping configuration
+    max_topics: Optional[int] = None  # Limit total topics to train
+    early_stopping_enabled: bool = False  # Enable loss-based early stopping
+    early_stopping_patience: int = 3  # Stop if loss CV < threshold for N topics
+    early_stopping_cv_threshold: float = 15.0  # Coefficient of variation threshold (%)
+    early_stopping_min_topics: int = 10  # Minimum topics before early stopping applies
+
     # Paths
     data_dir: str = "./data"
     output_dir: str = "./output"
@@ -288,7 +295,7 @@ class DPOPipeline:
         preference_data: Optional[List[Dict]] = None,
     ) -> PipelineResult:
         """
-        Train the full curriculum.
+        Train the full curriculum with early stopping support.
 
         Args:
             sft_data: Optional SFT data (loads from file if None)
@@ -312,9 +319,77 @@ class DPOPipeline:
             # Organize into units/chapters/topics
             curriculum = self._organize_curriculum(grouped_data)
 
+            # Track loss history for early stopping
+            loss_history: List[float] = []
+            topics_trained = 0
+            early_stopped = False
+
             # Train each unit
             for unit_data in curriculum:
-                unit_progress = self.train_unit(unit_data)
+                unit_id = unit_data["unit_id"]
+                logger.info(f"Training unit: {unit_id}")
+
+                chapters = []
+                for chapter_data in unit_data.get("chapters", []):
+                    chapter_id = chapter_data["chapter_id"]
+                    logger.info(f"Training chapter: {chapter_id}")
+
+                    topics = []
+                    for topic_data in chapter_data.get("topics", []):
+                        # Check max_topics limit
+                        if self.config.max_topics and topics_trained >= self.config.max_topics:
+                            logger.info(f"Reached max_topics limit ({self.config.max_topics}). Stopping training.")
+                            early_stopped = True
+                            break
+
+                        # Train topic
+                        topic_progress = self.train_topic(topic_data)
+                        topics.append(topic_progress)
+                        topics_trained += 1
+
+                        # Track loss for early stopping
+                        if topic_progress.orpo_loss is not None:
+                            loss_history.append(topic_progress.orpo_loss)
+
+                        # Check early stopping
+                        if (self.config.early_stopping_enabled 
+                            and topics_trained >= self.config.early_stopping_min_topics
+                            and len(loss_history) >= self.config.early_stopping_patience):
+                            
+                            recent_losses = loss_history[-self.config.early_stopping_patience:]
+                            cv = self._calculate_cv(recent_losses)
+                            
+                            if cv < self.config.early_stopping_cv_threshold:
+                                logger.info(
+                                    f"Early stopping triggered: Loss CV ({cv:.1f}%) < threshold "
+                                    f"({self.config.early_stopping_cv_threshold}%) for "
+                                    f"{self.config.early_stopping_patience} topics"
+                                )
+                                early_stopped = True
+                                break
+
+                    if early_stopped:
+                        break
+
+                    # Create chapter progress
+                    chapter_progress = ChapterProgress(
+                        chapter_id=chapter_id,
+                        topics=topics,
+                    )
+                    chapters.append(chapter_progress)
+
+                    # Clear cache between chapters
+                    mps_empty_cache()
+
+                if early_stopped:
+                    break
+
+                # Create unit progress
+                unit_progress = UnitProgress(
+                    unit_id=unit_id,
+                    chapters=chapters,
+                    merged=False,
+                )
                 self.units.append(unit_progress)
 
                 # Merge after unit if enabled
@@ -330,6 +405,9 @@ class DPOPipeline:
             passed_topics = sum(u.passed_topics for u in self.units)
             failed_topics = self._collect_failed_topics()
             training_time = (time.time() - self.start_time) / 3600
+
+            if early_stopped:
+                logger.info(f"Training stopped early after {topics_trained} topics")
 
             return PipelineResult(
                 success=len(failed_topics) == 0,
@@ -799,3 +877,18 @@ class DPOPipeline:
                     if topic.status == TopicStatus.FAILED:
                         failed.append(topic.topic_id)
         return failed
+
+    def _calculate_cv(self, values: List[float]) -> float:
+        """Calculate coefficient of variation (CV) as percentage."""
+        if not values or len(values) < 2:
+            return 100.0  # High CV if insufficient data
+        
+        mean = sum(values) / len(values)
+        if mean == 0:
+            return 100.0
+        
+        variance = sum((x - mean) ** 2 for x in values) / len(values)
+        std_dev = variance ** 0.5
+        cv = (std_dev / mean) * 100
+        
+        return cv

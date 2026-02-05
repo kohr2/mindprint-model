@@ -1,0 +1,58 @@
+# Curriculum Training Pipeline Configuration
+# Bob Loukas Mindprint - Mac Studio M2 Ultra (64GB)
+# Train all 10 curriculum topics with separate output directories
+
+# Backend configuration
+backend:
+  type: mlx
+  device: auto
+  dtype: float16
+
+# Model
+model:
+  name: Qwen/Qwen2.5-7B-Instruct
+  dtype: float16
+  device: mps
+
+# ORPO settings
+orpo:
+  steps_per_topic: 100
+  learning_rate: 0.0003
+  batch_size: 4
+  lambda_orpo: 0.1
+  lora_rank: 8
+  lora_alpha: 16
+  target_modules:
+    - q_proj
+    - v_proj
+    - o_proj
+    - up_proj
+    - down_proj
+
+# Thresholds
+thresholds:
+  accuracy_threshold: 0.70
+  topic_pass_threshold: 0.90
+
+# Pipeline control
+pipeline:
+  merge_after_unit: true
+  max_retries_per_topic: 2
+  
+  # Early stopping configuration (optional - for curriculum with 10 topics)
+  max_topics: null  # Train all topics (10 total)
+  early_stopping_enabled: true  # Enable but won't trigger with only 10 topics
+  early_stopping_patience: 3
+  early_stopping_cv_threshold: 15.0
+  early_stopping_min_topics: 5  # Lower threshold for smaller dataset
+
+# Paths - SEPARATE from transcript outputs
+paths:
+  data_dir: ./data/bob_loukas/textbook  # Curriculum dataset
+  output_dir: ./output/curriculum  # Separate output directory
+  checkpoint_dir: ./checkpoints/curriculum  # Separate checkpoint directory
+
+# Logging
+logging:
+  level: INFO
+  log_file: ./logs/training_curriculum.log  # Separate log file

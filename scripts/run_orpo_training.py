@@ -115,6 +115,9 @@ def load_config(config_path: str) -> Tuple[PipelineConfig, str]:
     # Map YAML structure to PipelineConfig
     orpo_config = config_dict.get("orpo", {})
 
+    # Early stopping settings
+    pipeline_config = config_dict.get("pipeline", {})
+    
     config = PipelineConfig(
         # Backend settings
         backend_type=backend_type,
@@ -129,8 +132,14 @@ def load_config(config_path: str) -> Tuple[PipelineConfig, str]:
         accuracy_threshold=config_dict.get("thresholds", {}).get("accuracy_threshold", 0.70),
         topic_pass_threshold=config_dict.get("thresholds", {}).get("topic_pass_threshold", 0.90),
         # Pipeline control
-        merge_after_unit=config_dict.get("pipeline", {}).get("merge_after_unit", True),
-        max_retries_per_topic=config_dict.get("pipeline", {}).get("max_retries_per_topic", 2),
+        merge_after_unit=pipeline_config.get("merge_after_unit", True),
+        max_retries_per_topic=pipeline_config.get("max_retries_per_topic", 2),
+        # Early stopping configuration
+        max_topics=pipeline_config.get("max_topics"),
+        early_stopping_enabled=pipeline_config.get("early_stopping_enabled", False),
+        early_stopping_patience=pipeline_config.get("early_stopping_patience", 3),
+        early_stopping_cv_threshold=pipeline_config.get("early_stopping_cv_threshold", 15.0),
+        early_stopping_min_topics=pipeline_config.get("early_stopping_min_topics", 10),
         # Paths
         data_dir=config_dict.get("paths", {}).get("data_dir", "./data"),
         output_dir=config_dict.get("paths", {}).get("output_dir", "./output"),
