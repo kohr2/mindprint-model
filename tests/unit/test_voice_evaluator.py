@@ -372,12 +372,14 @@ class TestQuizEvaluatorPromptExtraction:
         model = MagicMock()
         tokenizer = MagicMock()
         model.get_underlying_model = MagicMock()
-        prompt = "What is Bitcoin?"
+        question = "What is Bitcoin?"
+        prompt = "What is Bitcoin?"  # _format_prompt may return same or chat-wrapped
         full_output = prompt + "\n\nBitcoin is a decentralized digital currency."
         tokenizer.return_value = {"input_ids": [[1, 2, 3]]}
         model.generate.return_value = full_output
         evaluator = QuizEvaluator(model, tokenizer)
-        answers = evaluator._generate_answers([prompt])
+        with patch.object(evaluator, "_format_prompt", return_value=prompt):
+            answers = evaluator._generate_answers([question])
         assert len(answers) == 1
         assert answers[0] == "Bitcoin is a decentralized digital currency."
 
@@ -386,15 +388,15 @@ class TestQuizEvaluatorPromptExtraction:
         model = MagicMock()
         tokenizer = MagicMock()
         model.get_underlying_model = MagicMock()
+        question = "What is Bitcoin?"
         prompt = "What is Bitcoin?"
-        # Simulate model returning text with different formatting (e.g. extra space or template)
         full_output = "<|im_start|>user\nWhat is Bitcoin?<|im_end|>\n<|im_start|>assistant\nBitcoin is digital gold."
         tokenizer.return_value = {"input_ids": [[1, 2, 3]]}
         model.generate.return_value = full_output
         evaluator = QuizEvaluator(model, tokenizer)
-        answers = evaluator._generate_answers([prompt])
+        with patch.object(evaluator, "_format_prompt", return_value=prompt):
+            answers = evaluator._generate_answers([question])
         assert len(answers) == 1
-        # Prompt not in output, so entire output is used
         assert "Bitcoin" in answers[0]
         assert answers[0].strip() != ""
 
@@ -403,12 +405,13 @@ class TestQuizEvaluatorPromptExtraction:
         model = MagicMock()
         tokenizer = MagicMock()
         model.get_underlying_model = MagicMock()
-        prompt = "  What is Bitcoin?  "
-        # Output has prompt stripped (as in code: prompt.strip() in output)
+        question = "  What is Bitcoin?  "
+        prompt_stripped = "What is Bitcoin?"
         full_output = "What is Bitcoin?\n\nIt is a cryptocurrency."
         tokenizer.return_value = {"input_ids": [[1, 2, 3]]}
         model.generate.return_value = full_output
         evaluator = QuizEvaluator(model, tokenizer)
-        answers = evaluator._generate_answers([prompt])
+        with patch.object(evaluator, "_format_prompt", return_value=prompt_stripped):
+            answers = evaluator._generate_answers([question])
         assert len(answers) == 1
         assert answers[0] == "It is a cryptocurrency."

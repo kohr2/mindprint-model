@@ -348,16 +348,9 @@ class QuizEvaluator:
                 # Check if output is string (MLX) or tensor (PyTorch)
                 if isinstance(output, str):
                     # MLX returns string directly - mlx_lm.generate returns full text including prompt
-                    # Extract only the generated part after the prompt
-                    if prompt.strip() in output:
-                        # Find where prompt ends and extract from there
-                        prompt_end_idx = output.find(prompt.strip()) + len(prompt.strip())
-                        answer = output[prompt_end_idx:].strip()
-                    else:
-                        # If prompt not found, assume entire output is the answer
-                        answer = output.strip()
-                    
-                    # Log if answer is suspiciously short or empty
+                    # Extract only the generated part; handle chat template formatting
+                    prompt_str = str(prompt).strip() if prompt else ""
+                    answer = self._extract_answer_from_output(output, prompt_str, question)
                     if len(answer) < 10:
                         logger.warning(f"Very short generated answer ({len(answer)} chars): '{answer[:100]}'")
                 else:
@@ -389,6 +382,47 @@ class QuizEvaluator:
             answers.append(answer.strip())
 
         return answers
+
+    def _extract_answer_from_output(self, output: str, prompt: str, question: str) -> str:
+        """Extract model answer from full generation output (prompt + answer).
+        Tries prompt strip first, then common assistant prefixes, then raw question; fallback to full output.
+        """
+        output = output or ""
+        output_stripped = output.strip()
+        if not output_stripped:
+            return ""
+
+        # 1. Exact prompt strip (e.g. same format as input)
+        if prompt and prompt in output:
+            idx = output.find(prompt) + len(prompt)
+            answer = output[idx:].strip()
+            if answer:
+                return answer
+
+        # 2. Common assistant/response prefixes (chat templates)
+        for prefix in (
+            "<|im_start|>assistant\n",
+            "<|im_end|>\n<|im_start|>assistant\n",
+            "assistant\n",
+            "<|assistant|>\n",
+            "\n\nAssistant:",
+            "\n\nassistant:",
+        ):
+            if prefix in output:
+                idx = output.find(prefix) + len(prefix)
+                answer = output[idx:].strip()
+                if answer:
+                    return answer
+
+        # 3. Raw question text may appear in output; take everything after it
+        if question and question.strip() in output:
+            idx = output.rfind(question.strip()) + len(question.strip())
+            answer = output[idx:].strip()
+            if answer:
+                return answer
+
+        # 4. Fallback: use full output so we never return empty (avoids 0-char evaluation)
+        return output_stripped
 
     def _format_prompt(self, question: str) -> str:
         """Format question as model prompt using tokenizer's chat template."""
