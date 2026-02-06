@@ -315,14 +315,23 @@ The recommended workflow uses git to sync code between your development machine 
 # SSH to Mac Studio
 ssh memetica-studio@100.87.103.70
 
-# Clone the repository
-cd ~/Documents/Memetica/Code
-git clone https://github.com/kohr2/mindprint-model
+# Clone the repository (uses SSH; ensure ~/.ssh/id_memetica_github is configured)
+cd ~/Documents/Memetica/Code  # or ~/mindprint-model if you already have a clone
+git clone git@github.com:benoit-memetica/mindprint-model.git
 cd mindprint-model
+```
 
 # Install dependencies
 pip3 install -r requirements.txt
 pip3 install mlx mlx-lm
+```
+
+If you already have a clone from the previous repo (kohr2), update the remote and pull:
+
+```bash
+cd ~/mindprint-model
+git remote set-url origin git@github.com:benoit-memetica/mindprint-model.git
+git fetch origin && git pull origin main
 ```
 
 **Normal Workflow:**

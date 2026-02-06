@@ -9,7 +9,7 @@
 
 ```bash
 # Clone repository
-git clone https://github.com/kohr2/mindprint-model
+git clone git@github.com:benoit-memetica/mindprint-model.git
 cd mindprint-model
 
 # Install package
