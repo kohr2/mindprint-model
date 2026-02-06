@@ -87,12 +87,13 @@ class ORPOLoss(BaseLoss):
         
         # Compute metrics
         import numpy as np
-        if hasattr(log_odds, 'item'):
-            accuracy = (log_odds > 0).mean().item()
-            odds_margin = log_odds.mean().item()
-        else:
+        # Accuracy: fraction where chosen preferred (log_odds > 0); use .float() for torch bool tensors
+        if hasattr(log_odds, 'float'):
             accuracy = (log_odds > 0).float().mean().item()
             odds_margin = log_odds.mean().item()
+        else:
+            accuracy = float((log_odds > 0).mean())
+            odds_margin = float(log_odds.mean())
         
         return LossOutput(
             loss=total_loss,
@@ -106,25 +107,29 @@ class ORPOLoss(BaseLoss):
         )
     
     def _compute_log_probs(self, logits: Any, labels: Any) -> Any:
-        """Compute log probabilities for labels given logits."""
-        if hasattr(logits, 'item'):  # MLX
+        """Compute log probabilities for labels given logits (mean over tokens)."""
+        try:
+            import torch
+            is_torch = isinstance(logits, torch.Tensor)
+        except ImportError:
+            is_torch = False
+        if is_torch:
+            # PyTorch
+            log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
+            token_logps = torch.gather(log_probs, -1, labels.unsqueeze(-1)).squeeze(-1)
+            return token_logps.mean(dim=-1)  # Average over sequence
+        else:
+            # MLX
             import mlx.nn as nn
             import mlx.core as mx
-
             log_probs = nn.log_softmax(logits, axis=-1)
             batch_size, seq_len, vocab_size = log_probs.shape
             flat_log_probs = log_probs.reshape(-1, vocab_size)
             flat_labels = labels.reshape(-1)
-
-            # Use one-hot encoding to gather values (MLX-compatible)
             one_hot = mx.eye(vocab_size)[flat_labels.astype(mx.int32)]
             selected = (flat_log_probs * one_hot).sum(axis=1)
-
-            return selected.reshape(batch_size, seq_len).sum(axis=-1)
-        else:  # PyTorch
-            import torch
-            log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
-            return torch.gather(log_probs, -1, labels.unsqueeze(-1)).squeeze(-1).sum(dim=-1)
+            token_logps = selected.reshape(batch_size, seq_len)
+            return token_logps.mean(axis=-1)  # Average over sequence
     
     def _log_sigmoid(self, x: Any) -> Any:
         """Compute log(sigmoid(x)) numerically stable."""

@@ -17,6 +17,7 @@ from src.evaluation.voice_evaluator import (
     VoiceFidelityEvaluator,
     VoiceEvaluationResult,
     EvaluationWeights,
+    QuizEvaluator,
 )
 from src.evaluation.voice_markers import VoiceMarkers
 
@@ -361,3 +362,53 @@ class TestOverallScoreCalculation:
         assert result.critical_distinctions_passed is False
         # Score should be lower than if it passed
         assert result.overall_score < 1.0
+
+
+class TestQuizEvaluatorPromptExtraction:
+    """Test that QuizEvaluator._generate_answers correctly strips prompts from model output."""
+
+    def test_strips_prompt_when_output_contains_prompt_then_answer(self) -> None:
+        """When model returns full text (prompt + answer), only the answer part is extracted."""
+        model = MagicMock()
+        tokenizer = MagicMock()
+        model.get_underlying_model = MagicMock()
+        prompt = "What is Bitcoin?"
+        full_output = prompt + "\n\nBitcoin is a decentralized digital currency."
+        tokenizer.return_value = {"input_ids": [[1, 2, 3]]}
+        model.generate.return_value = full_output
+        evaluator = QuizEvaluator(model, tokenizer)
+        answers = evaluator._generate_answers([prompt])
+        assert len(answers) == 1
+        assert answers[0] == "Bitcoin is a decentralized digital currency."
+
+    def test_returns_full_output_when_prompt_not_found(self) -> None:
+        """When prompt is not found in output (e.g. chat template changed it), use full output as answer."""
+        model = MagicMock()
+        tokenizer = MagicMock()
+        model.get_underlying_model = MagicMock()
+        prompt = "What is Bitcoin?"
+        # Simulate model returning text with different formatting (e.g. extra space or template)
+        full_output = "<|im_start|>user\nWhat is Bitcoin?<|im_end|>\n<|im_start|>assistant\nBitcoin is digital gold."
+        tokenizer.return_value = {"input_ids": [[1, 2, 3]]}
+        model.generate.return_value = full_output
+        evaluator = QuizEvaluator(model, tokenizer)
+        answers = evaluator._generate_answers([prompt])
+        assert len(answers) == 1
+        # Prompt not in output, so entire output is used
+        assert "Bitcoin" in answers[0]
+        assert answers[0].strip() != ""
+
+    def test_handles_whitespace_stripped_prompt_in_output(self) -> None:
+        """Prompt may appear in output with different whitespace; strip() is used for matching."""
+        model = MagicMock()
+        tokenizer = MagicMock()
+        model.get_underlying_model = MagicMock()
+        prompt = "  What is Bitcoin?  "
+        # Output has prompt stripped (as in code: prompt.strip() in output)
+        full_output = "What is Bitcoin?\n\nIt is a cryptocurrency."
+        tokenizer.return_value = {"input_ids": [[1, 2, 3]]}
+        model.generate.return_value = full_output
+        evaluator = QuizEvaluator(model, tokenizer)
+        answers = evaluator._generate_answers([prompt])
+        assert len(answers) == 1
+        assert answers[0] == "It is a cryptocurrency."
