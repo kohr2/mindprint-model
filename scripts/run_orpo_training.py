@@ -20,6 +20,7 @@ Usage:
 """
 
 import argparse
+import json
 import logging
 import sys
 from pathlib import Path
@@ -301,6 +302,17 @@ def main():
         logger.info(f"Checkpoint dir: {config.checkpoint_dir}")
         return 0
 
+    # Load resume progress first so we can load model with adapter if resuming
+    resume_progress = None
+    if args.resume:
+        checkpoint_path = Path(args.resume)
+        if not checkpoint_path.exists():
+            logger.error(f"Checkpoint not found: {args.resume}")
+            return 1
+        with open(checkpoint_path) as f:
+            resume_progress = json.load(f)
+        logger.info(f"Will resume from checkpoint: {args.resume}")
+
     # Initialize pipeline based on mode
     backend = None
     model = None
@@ -327,8 +339,18 @@ def main():
 
         logger.info(f"Loading model via backend: {model_name}")
 
-        # Load model via backend
-        model_interface = backend.load_model(model_name)
+        # Load adapter from checkpoint if resuming
+        adapter_path = None
+        if resume_progress is not None:
+            adapter_path = resume_progress.get("adapter_path")
+            if adapter_path:
+                logger.info(f"Loading adapter from checkpoint: {adapter_path}")
+
+        # Load model via backend (with optional adapter for resume)
+        model_interface = backend.load_model(
+            model_name,
+            adapter_path=adapter_path,
+        )
         logger.info(f"Model loaded successfully")
         logger.info(f"Model parameters: {model_interface.num_parameters:,}")
 
@@ -361,19 +383,11 @@ def main():
         # Create pipeline
         pipeline = DPOPipeline(model, tokenizer, config)
 
-    # Resume from checkpoint if specified
-    if args.resume:
-        checkpoint_path = Path(args.resume)
-        if checkpoint_path.exists():
-            progress = pipeline.resume_from_checkpoint(checkpoint_path)
-            logger.info(f"Resumed from checkpoint: {args.resume}")
-        else:
-            logger.error(f"Checkpoint not found: {args.resume}")
-            return 1
-
-    # Run training
+    # Run training (pass resume progress so completed topics are skipped)
     logger.info("Starting training pipeline...")
-    result = pipeline.train_curriculum()
+    result = pipeline.train_curriculum(
+        initial_progress=resume_progress if resume_progress else None,
+    )
 
     # Report results
     logger.info("=== Training Complete ===")

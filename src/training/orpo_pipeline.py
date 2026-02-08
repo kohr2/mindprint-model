@@ -114,6 +114,19 @@ class TopicProgress:
             "training_time_seconds": self.training_time_seconds,
         }
 
+    @classmethod
+    def from_dict(cls, d: Dict) -> "TopicProgress":
+        """Reconstruct from dictionary (e.g. checkpoint)."""
+        return cls(
+            topic_id=d["topic_id"],
+            status=TopicStatus(d.get("status", "failed")),
+            accuracy_score=float(d.get("accuracy_score", 0.0)),
+            voice_score=float(d.get("voice_score", 0.0)),
+            retry_count=int(d.get("retry_count", 0)),
+            orpo_loss=float(d.get("orpo_loss", 0.0)),
+            training_time_seconds=float(d.get("training_time_seconds", 0.0)),
+        )
+
 
 @dataclass
 class ChapterProgress:
@@ -140,6 +153,12 @@ class ChapterProgress:
             "passed_count": self.passed_count,
             "total_count": self.total_count,
         }
+
+    @classmethod
+    def from_dict(cls, d: Dict) -> "ChapterProgress":
+        """Reconstruct from dictionary (e.g. checkpoint)."""
+        topics = [TopicProgress.from_dict(t) for t in d.get("topics", [])]
+        return cls(chapter_id=d["chapter_id"], topics=topics)
 
 
 @dataclass
@@ -170,6 +189,16 @@ class UnitProgress:
             "total_topics": self.total_topics,
         }
 
+    @classmethod
+    def from_dict(cls, d: Dict) -> "UnitProgress":
+        """Reconstruct from dictionary (e.g. checkpoint)."""
+        chapters = [ChapterProgress.from_dict(c) for c in d.get("chapters", [])]
+        return cls(
+            unit_id=d["unit_id"],
+            chapters=chapters,
+            merged=bool(d.get("merged", False)),
+        )
+
 
 @dataclass
 class PipelineResult:
@@ -191,6 +220,7 @@ class PipelineResult:
             "failed_topics": self.failed_topics,
             "total_training_time_hours": self.total_training_time_hours,
             "pass_rate": self.passed_topics / self.total_topics if self.total_topics > 0 else 0.0,
+            "units": [u.to_dict() for u in self.units],
         }
 
 
@@ -293,6 +323,7 @@ class DPOPipeline:
         self,
         sft_data: Optional[List[Dict]] = None,
         preference_data: Optional[List[Dict]] = None,
+        initial_progress: Optional[Dict] = None,
     ) -> PipelineResult:
         """
         Train the full curriculum with early stopping support.
@@ -300,11 +331,36 @@ class DPOPipeline:
         Args:
             sft_data: Optional SFT data (loads from file if None)
             preference_data: Optional preference pairs (loads from file if None)
+            initial_progress: Optional checkpoint dict from resume; completed topics
+                are skipped and adapter state is assumed already loaded.
 
         Returns:
             PipelineResult with training outcome
         """
         self.start_time = time.time()
+        self.units = []
+
+        # Restore from checkpoint so we skip completed topics (do not pre-fill self.units)
+        progress_map: Dict[str, TopicProgress] = {}
+        loss_history: List[float] = []
+        topics_trained = 0
+        if initial_progress is not None:
+            result_data = initial_progress.get("result", {})
+            units_data = result_data.get("units", [])
+            if units_data:
+                for u in units_data:
+                    unit = UnitProgress.from_dict(u)
+                    for chapter in unit.chapters:
+                        for topic in chapter.topics:
+                            progress_map[topic.topic_id] = topic
+                            if topic.orpo_loss is not None:
+                                loss_history.append(topic.orpo_loss)
+                topics_trained = sum(
+                    UnitProgress.from_dict(u).total_topics for u in units_data
+                )
+                logger.info(
+                    f"Resuming: {len(units_data)} units, {topics_trained} topics already done"
+                )
 
         try:
             # Load data if not provided
@@ -319,12 +375,9 @@ class DPOPipeline:
             # Organize into units/chapters/topics
             curriculum = self._organize_curriculum(grouped_data)
 
-            # Track loss history for early stopping
-            loss_history: List[float] = []
-            topics_trained = 0
             early_stopped = False
 
-            # Train each unit
+            # Train each unit (self.units may already be partially filled from resume)
             for unit_data in curriculum:
                 unit_id = unit_data["unit_id"]
                 logger.info(f"Training unit: {unit_id}")
@@ -336,6 +389,30 @@ class DPOPipeline:
 
                     topics = []
                     for topic_data in chapter_data.get("topics", []):
+                        topic_id = topic_data.get("topic_id", "")
+                        # Skip if already completed (resume)
+                        if topic_id in progress_map:
+                            topic_progress = progress_map[topic_id]
+                            topics.append(topic_progress)
+                            topics_trained += 1
+                            if topic_progress.orpo_loss is not None:
+                                loss_history.append(topic_progress.orpo_loss)
+                            # Check early stopping
+                            if (self.config.early_stopping_enabled
+                                and topics_trained >= self.config.early_stopping_min_topics
+                                and len(loss_history) >= self.config.early_stopping_patience):
+                                recent_losses = loss_history[-self.config.early_stopping_patience:]
+                                cv = self._calculate_cv(recent_losses)
+                                if cv < self.config.early_stopping_cv_threshold:
+                                    logger.info(
+                                        f"Early stopping triggered: Loss CV ({cv:.1f}%) < threshold "
+                                        f"({self.config.early_stopping_cv_threshold}%) for "
+                                        f"{self.config.early_stopping_patience} topics"
+                                    )
+                                    early_stopped = True
+                                    break
+                            continue
+
                         # Check max_topics limit
                         if self.config.max_topics and topics_trained >= self.config.max_topics:
                             logger.info(f"Reached max_topics limit ({self.config.max_topics}). Stopping training.")
@@ -687,6 +764,18 @@ class DPOPipeline:
         # Ensure checkpoint directory exists
         checkpoint_dir = Path(self.config.checkpoint_dir)
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
+        # Save adapter to checkpoint dir so resume can load it
+        if self.use_backend and self.model is not None:
+            if getattr(self.model, "has_adapter", lambda: False)():
+                adapter_dir = checkpoint_dir / "adapters_latest"
+                adapter_dir.mkdir(parents=True, exist_ok=True)
+                try:
+                    self.model.save_adapter(adapter_dir)
+                    progress["adapter_path"] = str(adapter_dir)
+                    logger.info(f"Saved adapter to {adapter_dir}")
+                except Exception as e:
+                    logger.warning(f"Could not save adapter for checkpoint: {e}")
         
         # Extract dataset name (reuse helper method)
         dataset_name = self._extract_dataset_name()
