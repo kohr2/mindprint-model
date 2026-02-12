@@ -18,7 +18,7 @@ import json
 from enum import Enum
 from typing import Dict, List
 
-import torch
+torch = pytest.importorskip("torch")
 
 from src.training.orpo_pipeline import (
     TopicStatus,

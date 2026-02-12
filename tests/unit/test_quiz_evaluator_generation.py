@@ -3,8 +3,6 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-import torch
-
 from src.evaluation.voice_evaluator import QuizEvaluator
 
 
@@ -14,7 +12,8 @@ class _TokenizerStub:
     chat_template = "{{ chat }}"
 
     def __call__(self, prompt, return_tensors="pt", truncation=True, max_length=2048):
-        return {"input_ids": torch.tensor([[1, 2, 3]])}
+        _ = (prompt, return_tensors, truncation, max_length)
+        return {"input_ids": [[1, 2, 3]]}
 
     def apply_chat_template(self, messages, tokenize=False, add_generation_prompt=True):
         _ = (messages, tokenize, add_generation_prompt)
@@ -38,4 +37,3 @@ def test_backend_empty_output_uses_nonempty_fallback() -> None:
 
     assert answers == ["[EMPTY_RESPONSE]"]
     assert model.generate.call_count >= 1
-

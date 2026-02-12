@@ -10,8 +10,14 @@ from typing import List, Dict, Optional
 import logging
 
 import numpy as np
-from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
+try:
+    from sentence_transformers import SentenceTransformer
+except ImportError:
+    SentenceTransformer = None  # type: ignore[assignment]
+try:
+    from sklearn.metrics.pairwise import cosine_similarity
+except ImportError:
+    cosine_similarity = None  # type: ignore[assignment]
 
 from .voice_markers import VoiceMarkers, DEFAULT_VOICE_MARKERS
 
@@ -97,6 +103,11 @@ class VoiceFidelityEvaluator:
             voice_markers: VoiceMarkers instance (uses default if None)
             weights: Evaluation weights (uses defaults if None)
         """
+        if SentenceTransformer is None:
+            raise RuntimeError(
+                "sentence-transformers is required for VoiceFidelityEvaluator. "
+                "Install with: pip install sentence-transformers"
+            )
         self.embedder = SentenceTransformer(embedding_model)
         self.voice_markers = voice_markers or DEFAULT_VOICE_MARKERS
         self.weights = weights or EvaluationWeights()
@@ -195,7 +206,15 @@ class VoiceFidelityEvaluator:
             ref_embeddings = self.embedder.encode(reference)
 
             # Compute pairwise similarities along diagonal
-            similarities = cosine_similarity(gen_embeddings, ref_embeddings)
+            if cosine_similarity is not None:
+                similarities = cosine_similarity(gen_embeddings, ref_embeddings)
+            else:
+                # Fallback cosine similarity without sklearn dependency
+                gen = np.array(gen_embeddings)
+                ref = np.array(ref_embeddings)
+                gen_norm = np.linalg.norm(gen, axis=1, keepdims=True) + 1e-12
+                ref_norm = np.linalg.norm(ref, axis=1, keepdims=True) + 1e-12
+                similarities = (gen @ ref.T) / (gen_norm @ ref_norm.T)
 
             # If same length, compare element-wise
             if len(generated) == len(reference):

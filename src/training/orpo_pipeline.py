@@ -19,10 +19,18 @@ import time
 import json
 import traceback
 
-import torch
-from transformers import PreTrainedModel, PreTrainedTokenizer
+try:
+    from transformers import PreTrainedModel, PreTrainedTokenizer
+except ImportError:
+    PreTrainedModel = Any  # type: ignore[misc,assignment]
+    PreTrainedTokenizer = Any  # type: ignore[misc,assignment]
 
-from .mps_utils import mps_empty_cache
+try:
+    from .mps_utils import mps_empty_cache
+except ImportError:
+    def mps_empty_cache() -> None:
+        """No-op cache clear when torch/MPS utilities are unavailable."""
+        return None
 from src.evaluation.voice_evaluator import QuizEvaluator
 
 # Backend interface imports (optional for backward compatibility)
