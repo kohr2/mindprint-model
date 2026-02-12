@@ -67,6 +67,12 @@ class PipelineConfig:
     orpo_learning_rate: float = 3e-4
     orpo_batch_size: int = 4
     orpo_lambda: float = 0.1  # Weight for preference term
+    orpo_lora_rank: int = 8
+    orpo_lora_alpha: float = 16.0
+    orpo_lora_dropout: float = 0.05
+    orpo_target_modules: List[str] = field(
+        default_factory=lambda: ["q_proj", "v_proj", "o_proj", "up_proj", "down_proj"]
+    )
 
     # Thresholds
     accuracy_threshold: float = 0.70  # Min accuracy to pass
@@ -342,7 +348,7 @@ class DPOPipeline:
 
         # Restore from checkpoint so we skip completed topics (do not pre-fill self.units)
         progress_map: Dict[str, TopicProgress] = {}
-        loss_history: List[float] = []
+        passed_loss_history: List[float] = []
         topics_trained = 0
         if initial_progress is not None:
             result_data = initial_progress.get("result", {})
@@ -353,8 +359,11 @@ class DPOPipeline:
                     for chapter in unit.chapters:
                         for topic in chapter.topics:
                             progress_map[topic.topic_id] = topic
-                            if topic.orpo_loss is not None:
-                                loss_history.append(topic.orpo_loss)
+                            if (
+                                topic.status == TopicStatus.PASSED
+                                and topic.orpo_loss is not None
+                            ):
+                                passed_loss_history.append(topic.orpo_loss)
                 topics_trained = sum(
                     UnitProgress.from_dict(u).total_topics for u in units_data
                 )
@@ -395,13 +404,16 @@ class DPOPipeline:
                             topic_progress = progress_map[topic_id]
                             topics.append(topic_progress)
                             topics_trained += 1
-                            if topic_progress.orpo_loss is not None:
-                                loss_history.append(topic_progress.orpo_loss)
+                            if (
+                                topic_progress.status == TopicStatus.PASSED
+                                and topic_progress.orpo_loss is not None
+                            ):
+                                passed_loss_history.append(topic_progress.orpo_loss)
                             # Check early stopping
                             if (self.config.early_stopping_enabled
                                 and topics_trained >= self.config.early_stopping_min_topics
-                                and len(loss_history) >= self.config.early_stopping_patience):
-                                recent_losses = loss_history[-self.config.early_stopping_patience:]
+                                and len(passed_loss_history) >= self.config.early_stopping_patience):
+                                recent_losses = passed_loss_history[-self.config.early_stopping_patience:]
                                 cv = self._calculate_cv(recent_losses)
                                 if cv < self.config.early_stopping_cv_threshold:
                                     logger.info(
@@ -425,15 +437,18 @@ class DPOPipeline:
                         topics_trained += 1
 
                         # Track loss for early stopping
-                        if topic_progress.orpo_loss is not None:
-                            loss_history.append(topic_progress.orpo_loss)
+                        if (
+                            topic_progress.status == TopicStatus.PASSED
+                            and topic_progress.orpo_loss is not None
+                        ):
+                            passed_loss_history.append(topic_progress.orpo_loss)
 
                         # Check early stopping
                         if (self.config.early_stopping_enabled 
                             and topics_trained >= self.config.early_stopping_min_topics
-                            and len(loss_history) >= self.config.early_stopping_patience):
+                            and len(passed_loss_history) >= self.config.early_stopping_patience):
                             
-                            recent_losses = loss_history[-self.config.early_stopping_patience:]
+                            recent_losses = passed_loss_history[-self.config.early_stopping_patience:]
                             cv = self._calculate_cv(recent_losses)
                             
                             if cv < self.config.early_stopping_cv_threshold:

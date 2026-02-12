@@ -84,13 +84,29 @@ class MLXModel(ModelInterface):
             # MLX generation - returns generated text as string
             # mlx_lm.generate uses different parameter names than transformers
             # For now, use basic parameters that are known to work
-            generated_text = mlx_generate(
-                self._model,
-                self._tokenizer,
-                prompt=prompt_text,
-                max_tokens=max_new_tokens,
-                verbose=False  # Suppress generation output
-            )
+            generation_kwargs = {
+                "prompt": prompt_text,
+                "max_tokens": max_new_tokens,
+                "verbose": False,
+                "temp": temperature,
+                "top_p": top_p,
+                "top_k": top_k,
+            }
+            try:
+                generated_text = mlx_generate(
+                    self._model,
+                    self._tokenizer,
+                    **generation_kwargs,
+                )
+            except TypeError:
+                # Older mlx-lm versions may not support all sampling kwargs.
+                for key in ("temp", "top_p", "top_k"):
+                    generation_kwargs.pop(key, None)
+                generated_text = mlx_generate(
+                    self._model,
+                    self._tokenizer,
+                    **generation_kwargs,
+                )
 
             return generated_text
 

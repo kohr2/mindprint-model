@@ -159,6 +159,26 @@ class MLXORPOTrainer(ORPOTrainerInterface):
                 f"{max_steps} steps, lambda_orpo={lambda_orpo}, lr={learning_rate}"
             )
 
+            def _format_pair(prompt: str, response: str) -> str:
+                prompt = (prompt or "").strip()
+                response = (response or "").strip()
+
+                if hasattr(tokenizer, "apply_chat_template") and tokenizer.chat_template is not None:
+                    try:
+                        messages = [
+                            {"role": "user", "content": prompt},
+                            {"role": "assistant", "content": response},
+                        ]
+                        return tokenizer.apply_chat_template(
+                            messages,
+                            tokenize=False,
+                            add_generation_prompt=False,
+                        )
+                    except Exception as e:
+                        logger.debug(f"Chat-template formatting failed, using fallback: {e}")
+
+                return f"Question:\n{prompt}\n\nAnswer:\n{response}"
+
             total_loss = 0.0
             steps_completed = 0
             nll_losses = []
@@ -173,10 +193,10 @@ class MLXORPOTrainer(ORPOTrainerInterface):
 
                 # Tokenize chosen and rejected responses
                 chosen_texts = [
-                    f"{item['prompt']}{item['chosen']}" for item in batch
+                    _format_pair(item.get("prompt", ""), item.get("chosen", "")) for item in batch
                 ]
                 rejected_texts = [
-                    f"{item['prompt']}{item['rejected']}" for item in batch
+                    _format_pair(item.get("prompt", ""), item.get("rejected", "")) for item in batch
                 ]
 
                 # Encode

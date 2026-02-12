@@ -342,7 +342,7 @@ class QuizEvaluator:
                 output = self.model.generate(
                     input_ids=input_ids,
                     max_new_tokens=512,
-                    temperature=0.1,
+                    temperature=0.0,
                 )
 
                 # Check if output is string (MLX) or tensor (PyTorch)
@@ -351,6 +351,10 @@ class QuizEvaluator:
                     # Extract only the generated part; handle chat template formatting
                     prompt_str = str(prompt).strip() if prompt else ""
                     answer = self._extract_answer_from_output(output, prompt_str, question)
+                    if len(answer) < 10:
+                        retry_answer = self._retry_backend_answer(question)
+                        if len(retry_answer) > len(answer):
+                            answer = retry_answer
                     if len(answer) < 10:
                         logger.warning(f"Very short generated answer ({len(answer)} chars): '{answer[:100]}'")
                 else:
@@ -379,9 +383,38 @@ class QuizEvaluator:
                     skip_special_tokens=True,
                 )
 
-            answers.append(answer.strip())
+            clean_answer = answer.strip()
+            if not clean_answer:
+                clean_answer = "[EMPTY_RESPONSE]"
+            answers.append(clean_answer)
 
         return answers
+
+    def _retry_backend_answer(self, question: str) -> str:
+        """Retry generation with a simpler prompt when the first answer is too short."""
+        retry_prompt = f"Question:\n{question}\n\nAnswer in 3-6 sentences:\n"
+
+        try:
+            inputs = self.tokenizer(
+                retry_prompt, return_tensors="pt", truncation=True, max_length=2048
+            )
+            input_ids = inputs["input_ids"]
+            output = self.model.generate(
+                input_ids=input_ids,
+                max_new_tokens=256,
+                temperature=0.0,
+            )
+
+            if isinstance(output, str):
+                return self._extract_answer_from_output(output, retry_prompt.strip(), question).strip()
+
+            return self.tokenizer.decode(
+                output[0][input_ids.shape[1]:],
+                skip_special_tokens=True,
+            ).strip()
+        except Exception as e:
+            logger.debug(f"Retry generation failed: {e}")
+            return ""
 
     def _extract_answer_from_output(self, output: str, prompt: str, question: str) -> str:
         """Extract model answer from full generation output (prompt + answer).

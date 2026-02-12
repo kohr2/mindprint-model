@@ -38,7 +38,7 @@ from src.training import (
 
 # Try to import backends (optional)
 try:
-    from src.backends import create_backend, BackendProtocol
+    from src.backends import create_backend, BackendProtocol, AdapterConfig
     # Import backend implementations to trigger registration
     try:
         import src.backends.pytorch  # noqa
@@ -53,6 +53,7 @@ except ImportError as e:
     print(f"Warning: Backend framework not available: {e}")
     BACKENDS_AVAILABLE = False
     BackendProtocol = None
+    AdapterConfig = None
 
 # Try to import PyTorch (for legacy mode)
 try:
@@ -129,6 +130,13 @@ def load_config(config_path: str) -> Tuple[PipelineConfig, str]:
         orpo_learning_rate=orpo_config.get("learning_rate", 3e-4),
         orpo_batch_size=orpo_config.get("batch_size", 4),
         orpo_lambda=orpo_config.get("lambda_orpo", 0.1),
+        orpo_lora_rank=orpo_config.get("lora_rank", 8),
+        orpo_lora_alpha=orpo_config.get("lora_alpha", 16),
+        orpo_lora_dropout=orpo_config.get("lora_dropout", 0.05),
+        orpo_target_modules=orpo_config.get(
+            "target_modules",
+            ["q_proj", "v_proj", "o_proj", "up_proj", "down_proj"],
+        ),
         # Thresholds
         accuracy_threshold=config_dict.get("thresholds", {}).get("accuracy_threshold", 0.70),
         topic_pass_threshold=config_dict.get("thresholds", {}).get("topic_pass_threshold", 0.90),
@@ -295,6 +303,9 @@ def main():
         logger.info(f"ORPO learning rate: {config.orpo_learning_rate}")
         logger.info(f"ORPO batch size: {config.orpo_batch_size}")
         logger.info(f"ORPO lambda: {config.orpo_lambda}")
+        logger.info(f"ORPO LoRA rank: {config.orpo_lora_rank}")
+        logger.info(f"ORPO LoRA alpha: {config.orpo_lora_alpha}")
+        logger.info(f"ORPO target modules: {config.orpo_target_modules}")
         logger.info(f"Accuracy threshold: {config.accuracy_threshold}")
         logger.info(f"Topic pass threshold: {config.topic_pass_threshold}")
         logger.info(f"Data dir: {config.data_dir}")
@@ -351,6 +362,25 @@ def main():
             model_name,
             adapter_path=adapter_path,
         )
+        if not model_interface.has_adapter():
+            adapter_cfg = AdapterConfig(
+                r=config.orpo_lora_rank,
+                alpha=config.orpo_lora_alpha,
+                dropout=config.orpo_lora_dropout,
+                target_modules=config.orpo_target_modules,
+            )
+            model_interface = backend.get_adapter_manager().add_adapter(
+                model_interface,
+                adapter_cfg,
+                adapter_name="orpo",
+            )
+            logger.info(
+                "Attached ORPO LoRA adapter: "
+                f"rank={config.orpo_lora_rank}, alpha={config.orpo_lora_alpha}, "
+                f"targets={config.orpo_target_modules}"
+            )
+        else:
+            logger.info("Using pre-loaded adapter from resume checkpoint")
         logger.info(f"Model loaded successfully")
         logger.info(f"Model parameters: {model_interface.num_parameters:,}")
 
