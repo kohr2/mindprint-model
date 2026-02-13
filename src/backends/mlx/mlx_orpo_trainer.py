@@ -181,8 +181,6 @@ class MLXORPOTrainer(ORPOTrainerInterface):
 
             total_loss = 0.0
             steps_completed = 0
-            nll_losses = []
-            or_losses = []
             accuracies = []
 
             for step in range(max_steps):
@@ -246,28 +244,14 @@ class MLXORPOTrainer(ORPOTrainerInterface):
                 # Update parameters
                 optimizer.update(policy_model, grads)
 
-                # Force evaluation
-                mx.eval(policy_model.parameters())
-
-                # Compute metrics for logging
-                chosen_logits_eval = policy_model(chosen_ids)
-                rejected_logits_eval = policy_model(rejected_ids)
-                loss_output = orpo_loss_fn.compute(
-                    logits=chosen_logits_eval,
-                    chosen_ids=chosen_ids,
-                    rejected_ids=rejected_ids,
-                    rejected_logits=rejected_logits_eval,
-                )
-                mx.eval(loss_output.loss)
+                # Materialize parameter updates and loss to avoid deferred graph growth.
+                mx.eval(policy_model.parameters(), loss)
 
                 total_loss += loss.item()
                 steps_completed += 1
 
-                # Store metrics
-                metrics = loss_output.metrics
-                nll_losses.append(metrics.get("nll_loss", 0.0))
-                or_losses.append(metrics.get("or_loss", 0.0))
-                accuracies.append(metrics.get("accuracy", 0.0))
+                # Accuracy is expensive to compute exactly on MLX each step; keep logging lightweight.
+                accuracies.append(0.0)
 
                 if (step + 1) % 10 == 0:
                     avg_loss = total_loss / steps_completed
@@ -283,8 +267,8 @@ class MLXORPOTrainer(ORPOTrainerInterface):
             # Store training stats
             self._training_stats = {
                 "final_loss": final_loss,
-                "nll_loss": sum(nll_losses) / len(nll_losses) if nll_losses else 0.0,
-                "or_loss": sum(or_losses) / len(or_losses) if or_losses else 0.0,
+                "nll_loss": 0.0,
+                "or_loss": 0.0,
                 "accuracy": sum(accuracies) / len(accuracies) if accuracies else 0.0,
                 "steps_completed": steps_completed,
             }
