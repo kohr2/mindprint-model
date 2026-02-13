@@ -126,16 +126,20 @@ class ORPOLoss(BaseLoss):
             batch_size, seq_len, vocab_size = log_probs.shape
             flat_log_probs = log_probs.reshape(-1, vocab_size)
             flat_labels = labels.reshape(-1)
-            one_hot = mx.eye(vocab_size)[flat_labels.astype(mx.int32)]
-            selected = (flat_log_probs * one_hot).sum(axis=1)
+            indices = mx.arange(flat_labels.shape[0], dtype=mx.int32)
+            selected = flat_log_probs[indices, flat_labels.astype(mx.int32)]
             token_logps = selected.reshape(batch_size, seq_len)
             return token_logps.mean(axis=-1)  # Average over sequence
     
     def _log_sigmoid(self, x: Any) -> Any:
         """Compute log(sigmoid(x)) numerically stable."""
-        import numpy as np
-        if hasattr(x, 'item'):  # MLX
-            return np.logaddexp(0, x) - x  # log(sigmoid(x))
-        else:  # PyTorch
+        try:
             import torch
-            return torch.nn.functional.logsigmoid(x)
+            if isinstance(x, torch.Tensor):
+                return torch.nn.functional.logsigmoid(x)
+        except ImportError:
+            pass
+
+        # MLX
+        import mlx.core as mx
+        return -mx.logaddexp(mx.array(0.0), -x)
