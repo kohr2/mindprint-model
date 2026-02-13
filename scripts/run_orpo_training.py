@@ -129,6 +129,7 @@ def load_config(config_path: str) -> Tuple[PipelineConfig, str]:
         orpo_steps_per_topic=orpo_config.get("steps_per_topic", 100),
         orpo_learning_rate=orpo_config.get("learning_rate", 3e-4),
         orpo_batch_size=orpo_config.get("batch_size", 4),
+        orpo_max_length=orpo_config.get("max_length", 512),
         orpo_lambda=orpo_config.get("lambda_orpo", 0.1),
         orpo_lora_rank=orpo_config.get("lora_rank", 8),
         orpo_lora_alpha=orpo_config.get("lora_alpha", 16),

@@ -74,6 +74,7 @@ class PipelineConfig:
     orpo_steps_per_topic: int = 100
     orpo_learning_rate: float = 3e-4
     orpo_batch_size: int = 4
+    orpo_max_length: int = 512
     orpo_lambda: float = 0.1  # Weight for preference term
     orpo_lora_rank: int = 8
     orpo_lora_alpha: float = 16.0
@@ -614,7 +615,7 @@ class DPOPipeline:
                     "per_device_batch_size": self.config.orpo_batch_size,
                     "lambda_orpo": self.config.orpo_lambda,
                     "output_dir": self.config.output_dir,
-                    "max_length": 1024,
+                    "max_length": self.config.orpo_max_length,
                 }
                 orpo_trainer = self.backend.create_orpo_trainer(self.model, orpo_config_dict)
 
