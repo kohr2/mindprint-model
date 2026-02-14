@@ -148,6 +148,7 @@ class MLXAdapterManager(AdapterManager):
 
         try:
             import mlx.core as mx
+            from mlx.utils import tree_flatten
 
             # Get model
             mlx_model = model.get_underlying_model()
@@ -155,9 +156,17 @@ class MLXAdapterManager(AdapterManager):
             # Save adapter weights
             # MLX uses safetensors format
             adapter_weights = {}
-            for name, param in mlx_model.named_parameters():
-                if 'lora' in name.lower():
-                    adapter_weights[name] = param
+            if hasattr(mlx_model, "named_parameters"):
+                for name, param in mlx_model.named_parameters():
+                    if "lora" in name.lower():
+                        adapter_weights[name] = param
+            else:
+                trainable = mlx_model.trainable_parameters()
+                for name, param in tree_flatten(trainable):
+                    adapter_weights[str(name)] = param
+
+            if not adapter_weights:
+                raise ValueError("No adapter weights found to save")
 
             # Save to file
             mx.save_safetensors(
@@ -240,19 +249,27 @@ class MLXAdapterManager(AdapterManager):
             raise ValueError("Model doesn't have an adapter to merge")
 
         try:
-            from mlx_lm.tuner import merge_lora_layers
+            from mlx_lm.tuner.lora import LoRALinear
+            from mlx.utils import tree_unflatten
 
             # Get underlying model
             mlx_model = model.get_underlying_model()
 
-            # Merge LoRA layers into base weights
-            # mlx-lm provides utilities for this
             logger.info(f"Merging adapter '{adapter_name}' into base model")
 
-            # Note: merge_lora_layers from mlx-lm does this automatically
-            # merged_model = merge_lora_layers(mlx_model)
+            # Replace each LoRALinear module with its fused linear layer.
+            # This yields a standalone model that no longer requires adapters.
+            fused_layers = []
+            for name, module in mlx_model.named_modules():
+                if isinstance(module, LoRALinear):
+                    fused_layers.append((name, module.fuse(dequantize=False)))
 
-            # For now, log that merge happened
+            if fused_layers:
+                mlx_model.update_modules(tree_unflatten(fused_layers))
+                logger.info(f"Fused {len(fused_layers)} LoRA layers into base model")
+            else:
+                logger.warning("No LoRA layers found to fuse")
+
             model._has_adapter = False
 
             logger.info(f"Merged adapter '{adapter_name}' into base model")

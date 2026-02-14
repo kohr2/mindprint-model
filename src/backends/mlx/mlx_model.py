@@ -229,14 +229,23 @@ class MLXModel(ModelInterface):
 
         try:
             import mlx.core as mx
+            from mlx.utils import tree_flatten
 
-            # Save adapter weights
-            # MLX adapters are saved as part of the model state
-            # Extract and save only adapter parameters
+            # Prefer named parameters when available; otherwise fallback to
+            # trainable parameters which should contain LoRA weights.
             adapter_weights = {}
-            for name, param in self._model.named_parameters():
-                if 'lora' in name.lower():
-                    adapter_weights[name] = param
+            if hasattr(self._model, "named_parameters"):
+                for name, param in self._model.named_parameters():
+                    if "lora" in name.lower():
+                        adapter_weights[name] = param
+            else:
+                trainable = self._model.trainable_parameters()
+                for name, param in tree_flatten(trainable):
+                    key = str(name)
+                    adapter_weights[key] = param
+
+            if not adapter_weights:
+                raise ValueError("No adapter weights found to save")
 
             # Save to file
             mx.save_safetensors(
