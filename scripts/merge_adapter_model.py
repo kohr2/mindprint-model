@@ -19,6 +19,12 @@ from typing import Any, Dict, Optional
 import yaml
 
 from src.backends import create_backend
+# Trigger backend registration side effects.
+import src.backends.mlx  # noqa: F401
+try:
+    import src.backends.pytorch  # noqa: F401
+except Exception:
+    pass
 
 
 logger = logging.getLogger(__name__)
@@ -128,4 +134,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

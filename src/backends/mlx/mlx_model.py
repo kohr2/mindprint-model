@@ -203,10 +203,16 @@ class MLXModel(ModelInterface):
             adapter_path: Path to adapter weights
         """
         try:
-            from mlx_lm.utils import load_adapter as mlx_load_adapter
-
-            # Load adapter using mlx-lm
-            mlx_load_adapter(self._model, str(adapter_path))
+            # mlx-lm API is version-dependent:
+            # - newer versions expose load_adapters(model, path)
+            # - some older docs/examples mention load_adapter(...)
+            from mlx_lm import utils as mlx_utils
+            if hasattr(mlx_utils, "load_adapters"):
+                mlx_utils.load_adapters(self._model, str(adapter_path))
+            elif hasattr(mlx_utils, "load_adapter"):
+                mlx_utils.load_adapter(self._model, str(adapter_path))
+            else:
+                raise RuntimeError("No adapter load function found in mlx_lm.utils")
             self._has_adapter = True
 
             logger.info(f"Loaded adapter from {adapter_path}")
