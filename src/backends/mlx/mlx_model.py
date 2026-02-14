@@ -203,16 +203,32 @@ class MLXModel(ModelInterface):
             adapter_path: Path to adapter weights
         """
         try:
-            # mlx-lm API is version-dependent:
-            # - newer versions expose load_adapters(model, path)
-            # - some older docs/examples mention load_adapter(...)
+            # Support both:
+            # - mlx-lm native adapter format: adapter_config.json + adapters.safetensors
+            # - legacy local format: adapter_model.safetensors only
             from mlx_lm import utils as mlx_utils
-            if hasattr(mlx_utils, "load_adapters"):
+            from mlx_lm.tuner.utils import linear_to_lora_layers
+
+            adapter_path = Path(adapter_path)
+            native_cfg = adapter_path / "adapter_config.json"
+            native_weights = adapter_path / "adapters.safetensors"
+            legacy_weights = adapter_path / "adapter_model.safetensors"
+
+            if native_cfg.exists() and native_weights.exists() and hasattr(mlx_utils, "load_adapters"):
                 mlx_utils.load_adapters(self._model, str(adapter_path))
-            elif hasattr(mlx_utils, "load_adapter"):
-                mlx_utils.load_adapter(self._model, str(adapter_path))
+            elif legacy_weights.exists():
+                # Backward compatibility for previously saved adapters.
+                linear_to_lora_layers(
+                    self._model,
+                    num_layers=-1,
+                    config={"rank": 8, "alpha": 16, "dropout": 0.0, "scale": 2.0},
+                )
+                self._model.load_weights(str(legacy_weights), strict=False)
             else:
-                raise RuntimeError("No adapter load function found in mlx_lm.utils")
+                raise FileNotFoundError(
+                    f"No adapter weights found in {adapter_path} "
+                    f"(expected adapters.safetensors or adapter_model.safetensors)"
+                )
             self._has_adapter = True
 
             logger.info(f"Loaded adapter from {adapter_path}")
@@ -236,6 +252,8 @@ class MLXModel(ModelInterface):
         try:
             import mlx.core as mx
             from mlx.utils import tree_flatten
+            import json
+            from mlx_lm.tuner.lora import LoRALinear
 
             # Prefer named parameters when available; otherwise fallback to
             # trainable parameters which should contain LoRA weights.
@@ -253,11 +271,34 @@ class MLXModel(ModelInterface):
             if not adapter_weights:
                 raise ValueError("No adapter weights found to save")
 
-            # Save to file
-            mx.save_safetensors(
-                str(adapter_path / "adapter_model.safetensors"),
-                adapter_weights
-            )
+            # Save in both legacy and mlx-lm native filenames.
+            mx.save_safetensors(str(adapter_path / "adapter_model.safetensors"), adapter_weights)
+            mx.save_safetensors(str(adapter_path / "adapters.safetensors"), adapter_weights)
+
+            # Build a minimal mlx-lm compatible config.
+            rank = 8
+            alpha = 16
+            dropout = 0.0
+            scale = 2.0
+            for module in self._model.modules():
+                if isinstance(module, LoRALinear):
+                    rank = int(module.lora_a.shape[1])
+                    scale = float(module.scale)
+                    dropout = float(getattr(module.dropout, "p", 0.0))
+                    alpha = int(round(scale * rank))
+                    break
+
+            config_data = {
+                "fine_tune_type": "lora",
+                "num_layers": -1,
+                "lora_parameters": {
+                    "rank": rank,
+                    "alpha": alpha,
+                    "dropout": dropout,
+                    "scale": scale,
+                },
+            }
+            (adapter_path / "adapter_config.json").write_text(json.dumps(config_data, indent=2))
 
             logger.info(f"Saved adapter to {adapter_path}")
 

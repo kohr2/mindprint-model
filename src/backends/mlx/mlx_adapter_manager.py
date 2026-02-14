@@ -149,6 +149,8 @@ class MLXAdapterManager(AdapterManager):
         try:
             import mlx.core as mx
             from mlx.utils import tree_flatten
+            import json
+            from mlx_lm.tuner.lora import LoRALinear
 
             # Get model
             mlx_model = model.get_underlying_model()
@@ -168,20 +170,35 @@ class MLXAdapterManager(AdapterManager):
             if not adapter_weights:
                 raise ValueError("No adapter weights found to save")
 
-            # Save to file
-            mx.save_safetensors(
-                str(path / "adapter_model.safetensors"),
-                adapter_weights
-            )
+            # Save in both legacy and mlx-lm native filenames.
+            mx.save_safetensors(str(path / "adapter_model.safetensors"), adapter_weights)
+            mx.save_safetensors(str(path / "adapters.safetensors"), adapter_weights)
 
-            # Save adapter config
-            import json
-            config_path = path / "adapter_config.json"
+            rank = 8
+            alpha = 16
+            dropout = 0.0
+            scale = 2.0
+            for module in mlx_model.modules():
+                if isinstance(module, LoRALinear):
+                    rank = int(module.lora_a.shape[1])
+                    scale = float(module.scale)
+                    dropout = float(getattr(module.dropout, "p", 0.0))
+                    alpha = int(round(scale * rank))
+                    break
+
             config_data = {
                 "adapter_name": adapter_name,
                 "adapter_type": "lora",
+                "fine_tune_type": "lora",
+                "num_layers": -1,
+                "lora_parameters": {
+                    "rank": rank,
+                    "alpha": alpha,
+                    "dropout": dropout,
+                    "scale": scale,
+                },
             }
-            config_path.write_text(json.dumps(config_data, indent=2))
+            (path / "adapter_config.json").write_text(json.dumps(config_data, indent=2))
 
             logger.info(f"Saved adapter '{adapter_name}' to {path}")
 
