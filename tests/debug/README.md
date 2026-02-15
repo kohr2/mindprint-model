@@ -55,12 +55,10 @@ cd mindprint-model
 python3 tests/debug/test_mlx_training_state.py
 ```
 
-Or via SSH on Mac Studio:
+Or on Mac Studio:
 
 ```bash
-ssh memetica-studio@100.91.229.17
 cd ~/mindprint-model
-export PATH=$PATH:/Users/memetica-studio/Library/Python/3.9/bin
 python3 tests/debug/test_mlx_training_state.py
 ```
 

@@ -3,7 +3,6 @@
 ## Quick Start
 
 ```bash
-ssh memetica-studio@100.91.229.17
 cd ~/mindprint-model
 ./scripts/local_evaluate.sh
 ```

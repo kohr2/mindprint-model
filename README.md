@@ -210,7 +210,7 @@ Key advantages over two-stage SFT+DPO:
 - **Simpler Pipeline**: Fewer hyperparameters to tune
 
 ```python
-from src.training.orpo_pipeline import DPOPipeline, PipelineConfig
+from src.training.orpo_pipeline import ORPOPipeline, PipelineConfig
 from src.backends import create_backend
 
 # Create backend
@@ -224,7 +224,7 @@ config = PipelineConfig(
 )
 
 # Initialize pipeline
-pipeline = DPOPipeline(
+pipeline = ORPOPipeline(
     model=None,  # Loaded via backend
     tokenizer=None,
     config=config,
@@ -307,72 +307,21 @@ pytest tests/integration/test_backend_equivalence.py --run-slow
 
 ### Mac Studio Training Workflow
 
-The recommended workflow uses git to sync code between your development machine and Mac Studio:
+Git-based workflow to sync code between development machine and Mac Studio.
 
-**One-Time Setup on Mac Studio:**
+**Workflow:**
 
-```bash
-# SSH to Mac Studio
-ssh memetica-studio@100.87.103.70
-
-# Clone the repository (uses SSH; ensure ~/.ssh/id_memetica_github is configured)
-cd ~/Documents/Memetica/Code  # or ~/mindprint-model if you already have a clone
-git clone git@github.com:benoit-memetica/mindprint-model.git
-cd mindprint-model
-```
-
-# Install dependencies
-pip3 install -r requirements.txt
-pip3 install mlx mlx-lm
-```
-
-If you already have a clone from the previous repo (kohr2), update the remote and pull. To give Mac Studio SSH access to GitHub (so it can pull from benoit-memetica), from your Mac run:
+1. **On development machine**: commit and push changes
+2. **On Mac Studio**: pull and train
 
 ```bash
-source .env.local
-./scripts/setup_mac_studio_github_ssh.sh
-```
-
-Then on Mac Studio (or after the script runs), ensure origin and pull:
-
-```bash
+# On Mac Studio
 cd ~/mindprint-model
-git remote set-url origin git@github.com:benoit-memetica/mindprint-model.git
-git fetch origin && git pull origin main
+./scripts/local_train.sh       # pulls latest code + starts training
+./scripts/local_monitor.sh     # monitor progress (in another terminal)
 ```
 
-**Normal Workflow:**
-
-1. **On your development machine** (MacBook Air):
-   ```bash
-   # Make changes, commit and push
-   git add .
-   git commit -m "Update training config"
-   git push origin main
-   ```
-
-2. **On Mac Studio**:
-   ```bash
-   # SSH to Mac Studio
-   ssh memetica-studio@100.87.103.70
-   cd ~/mindprint-model
-   
-   # Pull latest code and start training
-   ./scripts/local_train.sh
-   
-   # Monitor training (in another terminal)
-   ./scripts/local_monitor.sh
-   
-   # Or follow logs live
-   ./scripts/local_monitor.sh --follow
-   ```
-
-
-This will SSH to Mac Studio and run `local_train.sh` automatically.
-
-**Post-Training Tasks:**
-
-After training completes, run analysis and evaluation directly on Mac Studio:
+**Post-Training:**
 
 ```bash
 # Run post-training pipeline (merge + evaluate + export)
@@ -396,24 +345,13 @@ python3 scripts/analyze_training_results.py \
     --output analysis
 ```
 
-**Benefits of Git-Based Workflow:**
-
-- ✅ Simpler: No complex SSH/rsync scripts
-- ✅ Version controlled: All changes tracked in git
-- ✅ Standard workflow: Uses git pull/push everyone understands
-- ✅ Flexible: Easy to run commands directly on Mac Studio
-- ✅ No file syncing: Git handles code synchronization
-
-See [MLX Real-World Testing Guide](docs/MLX_REAL_WORLD_TESTING.md) for detailed instructions.
-
 ## Documentation
 
-- [Backend System README](src/backends/README.md) - API documentation for backend abstraction
-- [Migration Guide](docs/MIGRATION.md) - Migrating existing code to use backends
-- [Deployment Guide](docs/DEPLOYMENT.md) - Production deployment instructions
-- [MLX Real-World Testing Guide](docs/MLX_REAL_WORLD_TESTING.md) - Testing MLX backend on Mac Studio
-- [Adapter Stacking Debug](ADAPTER_STACKING_DEBUG.md) - Debugging adapter issues
-- [Testing Instructions](TESTING_INSTRUCTIONS.md) - Testing procedures
+- [Backend System](src/backends/README.md) - Backend abstraction API
+- [Deployment Guide](docs/DEPLOYMENT.md) - Production deployment
+- [MLX Testing Guide](docs/mlx/MLX_REAL_WORLD_TESTING.md) - MLX backend testing
+- [Training Plan](docs/TRAINING_PLAN.md) - Training workflow
+- [Evaluation Guide](docs/TRANSCRIPTS_EVALUATION.md) - Evaluation metrics and workflow
 
 ## Development
 

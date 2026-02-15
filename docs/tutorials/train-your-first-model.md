@@ -36,7 +36,6 @@ orpo:
 ### On Mac Studio
 
 ```bash
-ssh memetica-studio@100.91.229.17
 cd ~/mindprint-model
 ./scripts/local_train.sh
 ```
