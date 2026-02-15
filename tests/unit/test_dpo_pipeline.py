@@ -601,12 +601,9 @@ class TestTopicTrainingFlow:
         """Sample topic training data."""
         return {
             "topic_id": "unit-01/chapter-01/topic-01",
-            "sft_data": [
-                {"question": "Q1?", "answer": "A1"},
-                {"question": "Q2?", "answer": "A2"},
-            ],
             "preference_pairs": [
                 {"prompt": "Q1?", "chosen": "Good", "rejected": "Bad"},
+                {"prompt": "Q2?", "chosen": "A2", "rejected": "Bad2"},
             ],
         }
 
@@ -756,18 +753,10 @@ class TestDataLoading:
         data_dir = Path(temp) / "data"
         data_dir.mkdir()
 
-        # Create sample SFT data
-        sft_data = [
-            {"topic_id": "t1", "question": "Q1", "answer": "A1"},
-            {"topic_id": "t2", "question": "Q2", "answer": "A2"},
-        ]
-        with open(data_dir / "sft_data.jsonl", "w") as f:
-            for item in sft_data:
-                f.write(json.dumps(item) + "\n")
-
-        # Create sample preference data
+        # Create sample preference data with date-based prompts
         pref_data = [
-            {"topic_id": "t1", "prompt": "Q1", "chosen": "Good", "rejected": "Bad"},
+            {"prompt": "What did Bob discuss on 2019-02-19?", "chosen": "Good", "rejected": "Bad"},
+            {"prompt": "What did Bob discuss on 2019-03-04?", "chosen": "Great", "rejected": "Poor"},
         ]
         with open(data_dir / "preference_data.jsonl", "w") as f:
             for item in pref_data:
@@ -790,15 +779,6 @@ class TestDataLoading:
         tokenizer.pad_token = "<pad>"
         return tokenizer
 
-    def test_load_sft_data(self, mock_model, mock_tokenizer, temp_dir) -> None:
-        """Pipeline loads SFT data from file."""
-        config = PipelineConfig(data_dir=str(Path(temp_dir) / "data"))
-        pipeline = DPOPipeline(mock_model, mock_tokenizer, config)
-
-        sft_data = pipeline._load_sft_data()
-        assert len(sft_data) == 2
-        assert sft_data[0]["question"] == "Q1"
-
     def test_load_preference_data(
         self, mock_model, mock_tokenizer, temp_dir
     ) -> None:
@@ -813,15 +793,15 @@ class TestDataLoading:
     def test_groups_data_by_topic(
         self, mock_model, mock_tokenizer, temp_dir
     ) -> None:
-        """Pipeline groups data by topic ID."""
+        """Pipeline groups preference data by topic ID extracted from prompts."""
         config = PipelineConfig(data_dir=str(Path(temp_dir) / "data"))
         pipeline = DPOPipeline(mock_model, mock_tokenizer, config)
 
         grouped = pipeline._group_data_by_topic()
-        assert "t1" in grouped
-        assert "t2" in grouped
-        assert "sft_data" in grouped["t1"]
-        assert "preference_pairs" in grouped["t1"]
+        assert "episode-2019-02-19" in grouped
+        assert "episode-2019-03-04" in grouped
+        assert "preference_pairs" in grouped["episode-2019-02-19"]
+        assert len(grouped["episode-2019-02-19"]["preference_pairs"]) == 1
 
 
 class TestEvaluationIntegration:

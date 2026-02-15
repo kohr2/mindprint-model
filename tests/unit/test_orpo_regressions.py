@@ -81,7 +81,6 @@ def test_resume_failed_topics_do_not_trigger_early_stopping(tmp_path) -> None:
     ]
 
     with (
-        patch.object(pipeline, "_load_sft_data", return_value=[]),
         patch.object(pipeline, "_load_preference_data", return_value=[]),
         patch.object(pipeline, "_group_data_by_topic", return_value={}),
         patch.object(pipeline, "_organize_curriculum", return_value=curriculum),

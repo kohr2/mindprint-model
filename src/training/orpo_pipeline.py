@@ -15,6 +15,7 @@ from typing import List, Dict, Optional, Any
 from enum import Enum
 from datetime import datetime
 import logging
+import re
 import time
 import json
 import traceback
@@ -336,7 +337,6 @@ class DPOPipeline:
 
     def train_curriculum(
         self,
-        sft_data: Optional[List[Dict]] = None,
         preference_data: Optional[List[Dict]] = None,
         initial_progress: Optional[Dict] = None,
     ) -> PipelineResult:
@@ -344,7 +344,6 @@ class DPOPipeline:
         Train the full curriculum with early stopping support.
 
         Args:
-            sft_data: Optional SFT data (loads from file if None)
             preference_data: Optional preference pairs (loads from file if None)
             initial_progress: Optional checkpoint dict from resume; completed topics
                 are skipped and adapter state is assumed already loaded.
@@ -382,13 +381,11 @@ class DPOPipeline:
 
         try:
             # Load data if not provided
-            if sft_data is None:
-                sft_data = self._load_sft_data()
             if preference_data is None:
                 preference_data = self._load_preference_data()
 
             # Group data by topic
-            grouped_data = self._group_data_by_topic(sft_data, preference_data)
+            grouped_data = self._group_data_by_topic(preference_data)
 
             # Organize into units/chapters/topics
             curriculum = self._organize_curriculum(grouped_data)
@@ -701,14 +698,15 @@ class DPOPipeline:
 
             questions = topic_data.get("questions", [])
             if not questions:
-                # Create questions from SFT data (handles both PPO and DPO formats)
-                sft_data = topic_data.get("sft_data", [])
+                # Create questions from preference pairs (prompt=question, chosen=reference)
+                preference_pairs = topic_data.get("preference_pairs", [])
                 questions = [
                     {
-                        "question": d.get("question", d.get("instruction", "")),
-                        "reference_answer": d.get("answer", d.get("output", ""))
+                        "question": p.get("prompt", ""),
+                        "reference_answer": p.get("chosen", ""),
                     }
-                    for d in sft_data
+                    for p in preference_pairs
+                    if p.get("prompt") and p.get("chosen")
                 ]
 
             if not questions:
@@ -842,22 +840,6 @@ class DPOPipeline:
         logger.info(f"Resumed from checkpoint: {checkpoint_path}")
         return progress
 
-    def _load_sft_data(self) -> List[Dict]:
-        """Load SFT training data from file."""
-        data_path = Path(self.config.data_dir) / "sft_data.jsonl"
-
-        if not data_path.exists():
-            logger.warning(f"SFT data file not found: {data_path}")
-            return []
-
-        data = []
-        with open(data_path) as f:
-            for line in f:
-                data.append(json.loads(line))
-
-        logger.info(f"Loaded {len(data)} SFT examples")
-        return data
-
     def _load_preference_data(self) -> List[Dict]:
         """Load preference pair data from file."""
         data_path = Path(self.config.data_dir) / "preference_data.jsonl"
@@ -876,49 +858,51 @@ class DPOPipeline:
 
     def _group_data_by_topic(
         self,
-        sft_data: Optional[List[Dict]] = None,
         preference_data: Optional[List[Dict]] = None,
     ) -> Dict[str, Dict]:
         """
-        Group training data by topic ID.
+        Group preference data by topic ID.
+
+        Extracts topic IDs from preference prompts using date patterns
+        (e.g. "on 2019-02-19?" -> "episode-2019-02-19") or falls back
+        to a sequential topic ID.
 
         Args:
-            sft_data: SFT training examples
-            preference_data: Preference pairs
+            preference_data: Preference pairs with prompt/chosen/rejected
 
         Returns:
-            Dict mapping topic_id -> {sft_data, preference_pairs}
+            Dict mapping topic_id -> {preference_pairs, topic_id}
         """
-        if sft_data is None:
-            sft_data = self._load_sft_data()
         if preference_data is None:
             preference_data = self._load_preference_data()
 
         grouped: Dict[str, Dict] = {}
 
-        # Group SFT data by 'source' field
-        for item in sft_data:
-            topic_id = item.get("source", item.get("topic_id", "unknown"))
+        for item in preference_data:
+            topic_id = self._extract_topic_id(item)
             if topic_id not in grouped:
-                grouped[topic_id] = {"sft_data": [], "preference_pairs": [], "topic_id": topic_id}
-            grouped[topic_id]["sft_data"].append(item)
-
-        # Group preference data - match by instruction/prompt to SFT data
-        # For now, add all preference pairs to their corresponding topics based on prompts
-        for pref_item in preference_data:
-            prompt = pref_item.get("prompt", "")
-            # Find matching SFT item by instruction
-            matched = False
-            for topic_id, topic_data in grouped.items():
-                for sft_item in topic_data["sft_data"]:
-                    if sft_item.get("instruction") == prompt:
-                        topic_data["preference_pairs"].append(pref_item)
-                        matched = True
-                        break
-                if matched:
-                    break
+                grouped[topic_id] = {"preference_pairs": [], "topic_id": topic_id}
+            grouped[topic_id]["preference_pairs"].append(item)
 
         return grouped
+
+    @staticmethod
+    def _extract_topic_id(item: Dict) -> str:
+        """Extract topic ID from a preference pair.
+
+        Priority:
+        1. Explicit 'source' or 'topic_id' field (textbook dataset)
+        2. Date pattern in 'prompt' field (transcript dataset)
+        3. Fallback to 'unknown'
+        """
+        source = item.get("source") or item.get("topic_id")
+        if source:
+            return source
+        prompt = item.get("prompt", "")
+        match = re.search(r"(\d{4}-\d{2}-\d{2})", prompt)
+        if match:
+            return f"episode-{match.group(1)}"
+        return "general"
 
     def _organize_curriculum(self, grouped_data: Dict) -> List[Dict]:
         """
