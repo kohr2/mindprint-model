@@ -210,6 +210,53 @@ def load_model_and_tokenizer(
     return model, tokenizer
 
 
+def validate_training_dataset(data_dir: str) -> Tuple[int, int]:
+    """
+    Fail-fast validation for ORPO preference data.
+
+    Returns:
+        Tuple of (total_records, valid_records)
+    """
+    pref_path = Path(data_dir) / "preference_data.jsonl"
+    if not pref_path.exists():
+        raise FileNotFoundError(f"Missing training file: {pref_path}")
+
+    total_records = 0
+    valid_records = 0
+    with open(pref_path) as f:
+        for line_num, raw_line in enumerate(f, start=1):
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    f"Invalid JSON in {pref_path} at line {line_num}: {exc.msg}"
+                ) from exc
+
+            if not isinstance(record, dict):
+                raise ValueError(
+                    f"Invalid record type in {pref_path} at line {line_num}: "
+                    f"expected object, got {type(record).__name__}"
+                )
+
+            total_records += 1
+            if record.get("prompt") and record.get("chosen") and record.get("rejected"):
+                valid_records += 1
+
+    if total_records == 0:
+        raise ValueError(f"Training file is empty: {pref_path}")
+
+    if valid_records == 0:
+        raise ValueError(
+            "Training file has no valid preference pairs with prompt/chosen/rejected: "
+            f"{pref_path}"
+        )
+
+    return total_records, valid_records
+
+
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
@@ -310,6 +357,16 @@ def main():
         logger.info(f"Output dir: {config.output_dir}")
         logger.info(f"Checkpoint dir: {config.checkpoint_dir}")
         return 0
+
+    # Fail fast on empty/malformed training data before loading a large model
+    try:
+        total_pairs, valid_pairs = validate_training_dataset(config.data_dir)
+    except (FileNotFoundError, ValueError) as exc:
+        logger.error(f"Training preflight failed: {exc}")
+        return 1
+    logger.info(
+        f"Training dataset preflight passed: {valid_pairs}/{total_pairs} valid preference pairs"
+    )
 
     # Load resume progress first so we can load model with adapter if resuming
     resume_progress = None

@@ -325,21 +325,19 @@ class TestQuizDataLoading:
         assert len(pipeline.quiz_data["units"]) == 1
         assert pipeline.quiz_data["final"] is not None
 
-    def test_handles_missing_files(self) -> None:
-        """Handles missing quiz files gracefully."""
+    def test_raises_for_missing_or_empty_quiz_files(self) -> None:
+        """Fails fast when quiz directory has no evaluable questions."""
         with tempfile.TemporaryDirectory() as empty_dir:
             with patch("src.evaluation.pipeline.VoiceFidelityEvaluator"):
                 mock_model = MagicMock()
                 mock_tokenizer = MagicMock()
 
-                pipeline = EvaluationPipeline(
-                    model=mock_model,
-                    tokenizer=mock_tokenizer,
-                    quiz_data_path=empty_dir,
-                )
-
-            assert pipeline.quiz_data["topics"] == []
-            assert pipeline.quiz_data["final"] is None
+                with pytest.raises(ValueError, match="no evaluable open questions"):
+                    EvaluationPipeline(
+                        model=mock_model,
+                        tokenizer=mock_tokenizer,
+                        quiz_data_path=empty_dir,
+                    )
 
 
 class TestRecommendationGeneration:

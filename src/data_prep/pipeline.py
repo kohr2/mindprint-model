@@ -8,6 +8,7 @@ and output generation for the Bob Loukas mindprint training data.
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
+from collections import defaultdict
 import json
 import logging
 import random
@@ -203,6 +204,9 @@ class DataPipeline:
         transcript_questions = []
         transcript_sft_data = []
         transcript_preference_pairs = []
+        transcript_topic_quizzes: List[TopicQuiz] = []
+        transcript_chapter_tests: List[ChapterTest] = []
+        transcript_unit_exams: List[UnitExam] = []
 
         if use_transcripts:
             logger.info("Phase 2: Processing transcript data")
@@ -234,8 +238,23 @@ class DataPipeline:
                 [(q, q.source or 'transcript') for q in transcript_questions]
             )
 
+            # Build transcript evaluation hierarchy (topic/chapter/unit)
+            transcript_topic_quizzes = self._create_transcript_topic_quizzes(
+                transcript_questions
+            )
+            (
+                transcript_chapter_tests,
+                transcript_unit_exams,
+            ) = self._synthesize_hierarchy_from_topics(transcript_topic_quizzes)
+
             logger.info(f"Generated {len(transcript_sft_data)} transcript SFT examples")
             logger.info(f"Generated {len(transcript_preference_pairs)} transcript preference pairs")
+            logger.info(
+                "Built transcript evaluation hierarchy: "
+                f"{len(transcript_topic_quizzes)} topics, "
+                f"{len(transcript_chapter_tests)} chapters, "
+                f"{len(transcript_unit_exams)} units"
+            )
 
         # Phase 3: Combine datasets (if requested)
         if combine:
@@ -244,12 +263,27 @@ class DataPipeline:
                 textbook_sft_data, transcript_sft_data, self.config.textbook_ratio
             )
             preference_pairs = textbook_preference_pairs + transcript_preference_pairs
+            eval_topic_quizzes = topic_quizzes + transcript_topic_quizzes
+            eval_chapter_tests = chapter_tests + transcript_chapter_tests
+            eval_unit_exams = unit_exams + transcript_unit_exams
+            self.stats.topics_processed = len(eval_topic_quizzes)
+            self.stats.chapters_processed = len(eval_chapter_tests)
+            self.stats.units_processed = len(eval_unit_exams)
         elif use_transcripts:
             sft_data = transcript_sft_data
             preference_pairs = transcript_preference_pairs
+            eval_topic_quizzes = transcript_topic_quizzes
+            eval_chapter_tests = transcript_chapter_tests
+            eval_unit_exams = transcript_unit_exams
+            self.stats.topics_processed = len(eval_topic_quizzes)
+            self.stats.chapters_processed = len(eval_chapter_tests)
+            self.stats.units_processed = len(eval_unit_exams)
         else:
             sft_data = textbook_sft_data
             preference_pairs = textbook_preference_pairs
+            eval_topic_quizzes = topic_quizzes
+            eval_chapter_tests = chapter_tests
+            eval_unit_exams = unit_exams
 
         self.stats.sft_examples = len(sft_data)
         self.stats.preference_pairs = len(preference_pairs)
@@ -267,15 +301,93 @@ class DataPipeline:
         self._save_all(
             sft_data=sft_data,
             preference_pairs=preference_pairs,
-            topic_quizzes=topic_quizzes,
-            chapter_tests=chapter_tests,
-            unit_exams=unit_exams,
+            topic_quizzes=eval_topic_quizzes,
+            chapter_tests=eval_chapter_tests,
+            unit_exams=eval_unit_exams,
         )
 
         logger.info("Pipeline complete!")
         self._print_summary()
 
         return self.stats
+
+    def _create_transcript_topic_quizzes(
+        self, transcript_questions: List[Question]
+    ) -> List[TopicQuiz]:
+        """
+        Build topic quizzes from transcript questions grouped by source episode.
+
+        Expected source format is "episode-YYYY-MM-DD".
+        """
+        by_source: Dict[str, List[Question]] = defaultdict(list)
+        for question in transcript_questions:
+            source = question.source or "episode-unknown"
+            by_source[source].append(question)
+
+        topic_quizzes: List[TopicQuiz] = []
+        for source in sorted(by_source.keys()):
+            date_value = source.replace("episode-", "", 1)
+            unit = "unit-transcripts"
+            chapter = "chapter-transcripts"
+            topic = source.replace("/", "-")
+            title = f"Transcript {date_value}"
+
+            try:
+                parsed_date = datetime.strptime(date_value, "%Y-%m-%d")
+                unit = f"unit-{parsed_date.year}"
+                chapter = f"chapter-{parsed_date.month:02d}"
+                topic = f"episode-{parsed_date.strftime('%Y-%m-%d')}"
+                title = f"Episode {parsed_date.strftime('%Y-%m-%d')}"
+            except ValueError:
+                # Keep fallback structure for non-date transcript sources.
+                pass
+
+            topic_quizzes.append(
+                TopicQuiz(
+                    unit=unit,
+                    chapter=chapter,
+                    topic=topic,
+                    title=title,
+                    questions=by_source[source],
+                )
+            )
+
+        return topic_quizzes
+
+    def _synthesize_hierarchy_from_topics(
+        self, topic_quizzes: List[TopicQuiz]
+    ) -> Tuple[List[ChapterTest], List[UnitExam]]:
+        """Synthesize chapter tests and unit exams from topic quizzes."""
+        chapter_questions: Dict[Tuple[str, str], List[Question]] = defaultdict(list)
+        unit_questions: Dict[str, List[Question]] = defaultdict(list)
+
+        for quiz in topic_quizzes:
+            open_questions = [q for q in quiz.questions if q.question_type == "open"]
+            if not open_questions:
+                continue
+            chapter_questions[(quiz.unit, quiz.chapter)].extend(open_questions)
+            unit_questions[quiz.unit].extend(open_questions)
+
+        chapter_tests = [
+            ChapterTest(
+                unit=unit,
+                chapter=chapter,
+                title=f"{unit}/{chapter} Transcript Test",
+                questions=questions,
+            )
+            for (unit, chapter), questions in sorted(chapter_questions.items())
+        ]
+
+        unit_exams = [
+            UnitExam(
+                unit=unit,
+                title=f"{unit} Transcript Exam",
+                questions=questions,
+            )
+            for unit, questions in sorted(unit_questions.items())
+        ]
+
+        return chapter_tests, unit_exams
 
     def _combine_sft_data(
         self,

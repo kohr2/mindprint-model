@@ -1,0 +1,44 @@
+# Training Pipeline Configuration
+# Bob Loukas Mindprint - Last 2 Months Transcripts
+# ORPO (Odds Ratio Preference Optimization) training
+
+backend:
+  type: mlx
+  device: auto
+  dtype: float16
+
+model:
+  name: Qwen/Qwen2.5-7B-Instruct
+  dtype: float16
+  device: mps
+
+orpo:
+  steps_per_topic: 100
+  learning_rate: 0.0003
+  batch_size: 4
+  lambda_orpo: 0.1
+  lora_rank: 8
+  lora_alpha: 16
+  target_modules:
+    - q_proj
+    - v_proj
+    - o_proj
+    - up_proj
+    - down_proj
+
+thresholds:
+  accuracy_threshold: 0.70
+  topic_pass_threshold: 0.90
+
+pipeline:
+  merge_after_unit: true
+  max_retries_per_topic: 2
+
+paths:
+  data_dir: ./data/bob_loukas/transcripts_last2m
+  output_dir: ./output
+  checkpoint_dir: ./checkpoints/transcripts_last2m
+
+logging:
+  level: INFO
+  log_file: ./logs/training_transcripts_last2m.log

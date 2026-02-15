@@ -209,7 +209,52 @@ class EvaluationPipeline:
             with open(final_file) as f:
                 data["final"] = json.load(f)
 
+        self._validate_quiz_data(data, quiz_path)
         return data
+
+    @staticmethod
+    def _count_open_questions(level_data: List[Dict]) -> int:
+        """Count evaluable open-ended questions in a level payload."""
+        count = 0
+        for item in level_data:
+            if not isinstance(item, dict):
+                continue
+            questions = item.get("questions", [])
+            if not isinstance(questions, list):
+                continue
+            count += sum(
+                1
+                for q in questions
+                if isinstance(q, dict) and q.get("type") in [None, "open"]
+            )
+        return count
+
+    def _validate_quiz_data(self, data: Dict, quiz_path: Path) -> None:
+        """Fail fast when quiz dataset has no evaluable questions."""
+        topic_open = self._count_open_questions(data.get("topics", []))
+        chapter_open = self._count_open_questions(data.get("chapters", []))
+        unit_open = self._count_open_questions(data.get("units", []))
+
+        final_open = 0
+        final_payload = data.get("final")
+        if isinstance(final_payload, dict):
+            final_questions = final_payload.get("questions", [])
+            if isinstance(final_questions, list):
+                final_open = sum(
+                    1
+                    for q in final_questions
+                    if isinstance(q, dict) and q.get("type") in [None, "open"]
+                )
+
+        total_open = topic_open + chapter_open + unit_open + final_open
+        if total_open == 0:
+            raise ValueError(
+                "Quiz dataset has no evaluable open questions in "
+                f"{quiz_path}. Expected content in quiz_data.json, chapter_tests.json, "
+                "unit_exams.json, or final_assessment.json. "
+                f"Counts: topics={topic_open}, chapters={chapter_open}, "
+                f"units={unit_open}, final={final_open}."
+            )
 
     def run_full_evaluation(
         self,

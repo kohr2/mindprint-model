@@ -11,11 +11,18 @@ def _export(name: str, value: Any) -> None:
 
 
 from .voice_markers import VoiceMarkers
-from .voice_evaluator import VoiceFidelityEvaluator, VoiceEvaluationResult
 
 _export("VoiceMarkers", VoiceMarkers)
-_export("VoiceFidelityEvaluator", VoiceFidelityEvaluator)
-_export("VoiceEvaluationResult", VoiceEvaluationResult)
+
+try:
+    from .voice_evaluator import VoiceFidelityEvaluator, VoiceEvaluationResult
+
+    _export("VoiceFidelityEvaluator", VoiceFidelityEvaluator)
+    _export("VoiceEvaluationResult", VoiceEvaluationResult)
+except Exception:
+    # Allow importing lightweight utilities (e.g. voice markers) without
+    # requiring full evaluation dependencies in data-prep-only environments.
+    pass
 
 try:
     from .pipeline import (
@@ -35,4 +42,3 @@ try:
     _export("ReportGenerator", ReportGenerator)
 except Exception:
     pass
-

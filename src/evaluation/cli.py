@@ -5,6 +5,7 @@ Evaluation CLI - Command-line interface for running mindprint evaluations.
 import argparse
 import sys
 import logging
+import json
 from pathlib import Path
 
 import torch
@@ -123,6 +124,53 @@ def get_torch_dtype(dtype_str: str):
     return dtype_map.get(dtype_str, torch.bfloat16)
 
 
+def validate_quiz_dataset(quiz_data_path: Path) -> tuple[int, int, int, int]:
+    """
+    Fail-fast validation for evaluation dataset.
+
+    Returns:
+        Tuple with open question counts by level:
+        (topics_open, chapters_open, units_open, final_open)
+    """
+    if not quiz_data_path.exists():
+        raise FileNotFoundError(f"Quiz data directory not found: {quiz_data_path}")
+
+    def _load_json(path: Path, default):
+        if not path.exists():
+            return default
+        with open(path) as f:
+            return json.load(f)
+
+    topics = _load_json(quiz_data_path / "quiz_data.json", [])
+    chapters = _load_json(quiz_data_path / "chapter_tests.json", [])
+    units = _load_json(quiz_data_path / "unit_exams.json", [])
+    final = _load_json(quiz_data_path / "final_assessment.json", None)
+
+    topics_open = EvaluationPipeline._count_open_questions(topics)
+    chapters_open = EvaluationPipeline._count_open_questions(chapters)
+    units_open = EvaluationPipeline._count_open_questions(units)
+
+    final_open = 0
+    if isinstance(final, dict):
+        final_questions = final.get("questions", [])
+        if isinstance(final_questions, list):
+            final_open = sum(
+                1
+                for q in final_questions
+                if isinstance(q, dict) and q.get("type") in [None, "open"]
+            )
+
+    total_open = topics_open + chapters_open + units_open + final_open
+    if total_open == 0:
+        raise ValueError(
+            "Quiz dataset has no evaluable open questions. Expected content in "
+            f"{quiz_data_path / 'quiz_data.json'}, {quiz_data_path / 'chapter_tests.json'}, "
+            f"{quiz_data_path / 'unit_exams.json'}, or {quiz_data_path / 'final_assessment.json'}."
+        )
+
+    return topics_open, chapters_open, units_open, final_open
+
+
 def main():
     """Main entry point for evaluation CLI."""
     args = parse_args()
@@ -146,6 +194,19 @@ def main():
     logger.info(f"Quiz data: {args.quiz_data}")
     logger.info(f"Approach: {args.approach}")
     logger.info(f"Device: {args.device}")
+
+    # Fail fast on empty/malformed quiz data before loading model
+    try:
+        topic_open, chapter_open, unit_open, final_open = validate_quiz_dataset(
+            Path(args.quiz_data)
+        )
+    except (FileNotFoundError, ValueError, json.JSONDecodeError) as exc:
+        logger.error(f"Evaluation preflight failed: {exc}")
+        return 1
+    logger.info(
+        "Evaluation dataset preflight passed: "
+        f"topics={topic_open}, chapters={chapter_open}, units={unit_open}, final={final_open}"
+    )
 
     # Prepare quantization config
     quantization_config = None
@@ -197,19 +258,13 @@ def main():
 
     model.eval()
 
-    # Verify quiz data exists
-    quiz_data_path = Path(args.quiz_data)
-    if not quiz_data_path.exists():
-        logger.error(f"Quiz data directory not found: {quiz_data_path}")
-        sys.exit(1)
-
     # Run evaluation
     logger.info("Running evaluation...")
     try:
         pipeline = EvaluationPipeline(
             model=model,
             tokenizer=tokenizer,
-            quiz_data_path=str(quiz_data_path),
+            quiz_data_path=str(Path(args.quiz_data)),
             early_termination=not args.no_early_termination,
         )
 

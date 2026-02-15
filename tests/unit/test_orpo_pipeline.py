@@ -354,6 +354,35 @@ class TestDataLoading:
         assert len(pref_data) == 2
         assert pref_data[0]["chosen"] == "Good"
 
+    def test_load_preference_data_raises_for_empty_file(
+        self, mock_model, mock_tokenizer
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_dir = Path(temp_dir) / "data"
+            data_dir.mkdir()
+            (data_dir / "preference_data.jsonl").write_text("")
+
+            config = PipelineConfig(data_dir=str(data_dir))
+            pipeline = ORPOPipeline(mock_model, mock_tokenizer, config)
+
+            with pytest.raises(ValueError, match="file is empty"):
+                pipeline._load_preference_data()
+
+    def test_load_preference_data_raises_for_missing_fields(
+        self, mock_model, mock_tokenizer
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_dir = Path(temp_dir) / "data"
+            data_dir.mkdir()
+            invalid = {"prompt": "Q", "chosen": "A"}
+            (data_dir / "preference_data.jsonl").write_text(json.dumps(invalid) + "\n")
+
+            config = PipelineConfig(data_dir=str(data_dir))
+            pipeline = ORPOPipeline(mock_model, mock_tokenizer, config)
+
+            with pytest.raises(ValueError, match="Missing required fields"):
+                pipeline._load_preference_data()
+
     def test_groups_data_by_topic(self, mock_model, mock_tokenizer, temp_dir) -> None:
         config = PipelineConfig(data_dir=str(Path(temp_dir) / "data"))
         pipeline = ORPOPipeline(mock_model, mock_tokenizer, config)

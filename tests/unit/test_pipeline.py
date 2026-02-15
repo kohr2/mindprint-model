@@ -225,6 +225,79 @@ class TestPreferencePairCreation:
         assert len(pairs) == 1
 
 
+class TestTranscriptHierarchySynthesis:
+    """Test transcript quiz/chapter/unit synthesis helpers."""
+
+    def test_creates_topic_quizzes_from_transcript_sources(
+        self, temp_output_dir: str, fixtures_path: Path
+    ) -> None:
+        config = PipelineConfig(
+            textbook_path=str(fixtures_path),
+            output_path=temp_output_dir,
+            augment_questions=False,
+        )
+        pipeline = DataPipeline(config)
+
+        transcript_questions = [
+            Question(
+                question="Q1",
+                reference_answer="A1",
+                source="episode-2026-01-15",
+            ),
+            Question(
+                question="Q2",
+                reference_answer="A2",
+                source="episode-2026-01-15",
+            ),
+            Question(
+                question="Q3",
+                reference_answer="A3",
+                source="episode-2026-02-02",
+            ),
+        ]
+
+        quizzes = pipeline._create_transcript_topic_quizzes(transcript_questions)
+
+        assert len(quizzes) == 2
+        assert quizzes[0].unit == "unit-2026"
+        assert quizzes[0].chapter in {"chapter-01", "chapter-02"}
+        assert all(q.topic.startswith("episode-2026-") for q in quizzes)
+
+    def test_synthesizes_chapter_and_unit_from_transcript_topics(
+        self, temp_output_dir: str, fixtures_path: Path
+    ) -> None:
+        config = PipelineConfig(
+            textbook_path=str(fixtures_path),
+            output_path=temp_output_dir,
+            augment_questions=False,
+        )
+        pipeline = DataPipeline(config)
+
+        topic_quizzes = [
+            TopicQuiz(
+                unit="unit-2026",
+                chapter="chapter-01",
+                topic="episode-2026-01-15",
+                title="Episode 2026-01-15",
+                questions=[Question(question="Q1", reference_answer="A1", source="episode-2026-01-15")],
+            ),
+            TopicQuiz(
+                unit="unit-2026",
+                chapter="chapter-02",
+                topic="episode-2026-02-02",
+                title="Episode 2026-02-02",
+                questions=[Question(question="Q2", reference_answer="A2", source="episode-2026-02-02")],
+            ),
+        ]
+
+        chapter_tests, unit_exams = pipeline._synthesize_hierarchy_from_topics(topic_quizzes)
+
+        assert len(chapter_tests) == 2
+        assert len(unit_exams) == 1
+        assert unit_exams[0].unit == "unit-2026"
+        assert len(unit_exams[0].questions) == 2
+
+
 class TestOutputSaving:
     """Test output file saving."""
 

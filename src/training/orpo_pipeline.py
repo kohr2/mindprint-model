@@ -389,6 +389,11 @@ class ORPOPipeline:
 
             # Organize into units/chapters/topics
             curriculum = self._organize_curriculum(grouped_data)
+            if not curriculum:
+                raise ValueError(
+                    "No trainable topics found in preference data. "
+                    "Ensure preference_data.jsonl contains valid records with topic IDs."
+                )
 
             early_stopped = False
 
@@ -845,13 +850,38 @@ class ORPOPipeline:
         data_path = Path(self.config.data_dir) / "preference_data.jsonl"
 
         if not data_path.exists():
-            logger.warning(f"Preference data file not found: {data_path}")
-            return []
+            raise FileNotFoundError(f"Preference data file not found: {data_path}")
 
         data = []
         with open(data_path) as f:
-            for line in f:
-                data.append(json.loads(line))
+            for line_num, raw_line in enumerate(f, start=1):
+                line = raw_line.strip()
+                if not line:
+                    continue
+                try:
+                    item = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    raise ValueError(
+                        f"Invalid JSON in {data_path} at line {line_num}: {exc.msg}"
+                    ) from exc
+                if not isinstance(item, dict):
+                    raise ValueError(
+                        f"Invalid record type in {data_path} at line {line_num}: "
+                        f"expected object, got {type(item).__name__}"
+                    )
+                missing_fields = [
+                    field for field in ("prompt", "chosen", "rejected")
+                    if not item.get(field)
+                ]
+                if missing_fields:
+                    raise ValueError(
+                        f"Missing required fields {missing_fields} in {data_path} "
+                        f"at line {line_num}"
+                    )
+                data.append(item)
+
+        if not data:
+            raise ValueError(f"Preference data file is empty: {data_path}")
 
         logger.info(f"Loaded {len(data)} preference pairs")
         return data
