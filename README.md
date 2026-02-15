@@ -326,7 +326,14 @@ pip3 install -r requirements.txt
 pip3 install mlx mlx-lm
 ```
 
-If you already have a clone from the previous repo (kohr2), update the remote and pull:
+If you already have a clone from the previous repo (kohr2), update the remote and pull. To give Mac Studio SSH access to GitHub (so it can pull from benoit-memetica), from your Mac run:
+
+```bash
+source .env.local
+./scripts/setup_mac_studio_github_ssh.sh
+```
+
+Then on Mac Studio (or after the script runs), ensure origin and pull:
 
 ```bash
 cd ~/mindprint-model
@@ -360,15 +367,6 @@ git fetch origin && git pull origin main
    ./scripts/local_monitor.sh --follow
    ```
 
-**Optional: Quick Deploy Script**
-
-If you don't want to SSH manually, you can use the convenience script from your development machine:
-
-```bash
-# On MacBook Air
-source .env.local
-./scripts/quick_deploy.sh
-```
 
 This will SSH to Mac Studio and run `local_train.sh` automatically.
 

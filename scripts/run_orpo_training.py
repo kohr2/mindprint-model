@@ -1,22 +1,19 @@
 #!/usr/bin/env python3
 """
-DPO Training Pipeline CLI.
+ORPO Training Pipeline CLI.
 
-Runs the full SFT + DPO training pipeline for Bob Loukas mindprint.
+Runs the ORPO training pipeline for Bob Loukas mindprint.
 Supports both PyTorch (CUDA/CPU) and MLX (Apple Silicon) backends.
 
 Usage:
     # With MLX backend (Mac Studio)
-    python scripts/run_dpo_training.py --config configs/training_pipeline.yaml --backend mlx
+    python scripts/run_orpo_training.py --config configs/training_pipeline.yaml --backend mlx
 
     # With PyTorch backend (Cloud GPU)
-    python scripts/run_dpo_training.py --config configs/training_pipeline.yaml --backend pytorch
-
-    # Legacy mode (direct PyTorch)
-    python scripts/run_dpo_training.py --config configs/training_pipeline.yaml --backend null
+    python scripts/run_orpo_training.py --config configs/training_pipeline.yaml --backend pytorch
 
     # Resume from checkpoint
-    python scripts/run_dpo_training.py --resume ./checkpoints/latest.json
+    python scripts/run_orpo_training.py --resume ./checkpoints/latest.json
 """
 
 import argparse
@@ -33,7 +30,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.training import (
     PipelineConfig,
-    DPOPipeline,
+    ORPOPipeline,
 )
 
 # Try to import backends (optional)
@@ -386,7 +383,7 @@ def main():
         logger.info(f"Model parameters: {model_interface.num_parameters:,}")
 
         # Create pipeline with backend
-        pipeline = DPOPipeline(
+        pipeline = ORPOPipeline(
             model=model_interface,  # Pass ModelInterface directly
             tokenizer=model_interface.tokenizer,
             config=config,
@@ -412,7 +409,7 @@ def main():
         )
 
         # Create pipeline
-        pipeline = DPOPipeline(model, tokenizer, config)
+        pipeline = ORPOPipeline(model, tokenizer, config)
 
     # Run training (pass resume progress so completed topics are skipped)
     logger.info("Starting training pipeline...")

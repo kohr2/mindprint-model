@@ -1,12 +1,12 @@
 """
-DPOPipeline (ORPO-only) - ORPO Training Orchestration.
+ORPOPipeline - ORPO Training Orchestration.
 
 Orchestrates the ORPO training pipeline:
 1. ORPO training on each topic (combined SFT + preference alignment)
 2. Evaluation (accuracy + voice fidelity)
 3. Merge adapters after each unit
 
-Optimized for Mac Studio M2 Ultra (MPS backend, fp16) and PyTorch backends.
+Optimized for Apple Silicon (MLX backend) and PyTorch backends.
 """
 
 from dataclasses import dataclass, field
@@ -240,7 +240,7 @@ class PipelineResult:
         }
 
 
-class DPOPipeline:
+class ORPOPipeline:
     """
     Orchestrates SFT + DPO training across the curriculum.
 
@@ -332,7 +332,7 @@ class DPOPipeline:
         self.start_time: float = 0.0
 
         logger.info(
-            f"DPOPipeline initialized in {'backend' if self.use_backend else 'legacy'} mode"
+            f"ORPOPipeline initialized in {'backend' if self.use_backend else 'legacy'} mode"
         )
 
     def train_curriculum(

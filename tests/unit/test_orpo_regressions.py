@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from src.training.orpo_pipeline import (
     ChapterProgress,
-    DPOPipeline,
+    ORPOPipeline,
     PipelineConfig,
     TopicProgress,
     TopicStatus,
@@ -48,7 +48,7 @@ def test_resume_failed_topics_do_not_trigger_early_stopping(tmp_path) -> None:
         output_dir=str(tmp_path / "out"),
         checkpoint_dir=str(tmp_path / "ckpt"),
     )
-    pipeline = DPOPipeline(model=object(), tokenizer=_mock_tokenizer(), config=config)
+    pipeline = ORPOPipeline(model=object(), tokenizer=_mock_tokenizer(), config=config)
 
     resume_unit = UnitProgress(
         unit_id="unit-01",

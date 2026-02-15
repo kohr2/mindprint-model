@@ -85,7 +85,7 @@ from .orpo_pipeline import (
     ChapterProgress,
     UnitProgress,
     PipelineResult,
-    DPOPipeline,
+    ORPOPipeline,
 )
 
 _export("TopicStatus", TopicStatus)
@@ -94,5 +94,9 @@ _export("TopicProgress", TopicProgress)
 _export("ChapterProgress", ChapterProgress)
 _export("UnitProgress", UnitProgress)
 _export("PipelineResult", PipelineResult)
+_export("ORPOPipeline", ORPOPipeline)
+
+# Backward compatibility alias
+DPOPipeline = ORPOPipeline
 _export("DPOPipeline", DPOPipeline)
 

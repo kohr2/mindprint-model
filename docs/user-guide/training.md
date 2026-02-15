@@ -73,7 +73,7 @@ from src.adapters.tracking import WandBTracker, WandBConfig
 
 tracker = WandBTracker(
     WandBConfig(project="mindprint"),
-    run_config={"loss_type": "simpo", ...}
+    run_config={"loss_type": "orpo", ...}
 )
 
 # Training loop

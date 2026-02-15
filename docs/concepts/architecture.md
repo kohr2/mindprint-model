@@ -1,90 +1,71 @@
 # Architecture
 
-## Overview
-
-Mindprint Model follows **clean architecture** principles with clear separation of concerns.
-
 ## Directory Structure
 
 ```
 src/
-├── core/              # Domain logic (no external dependencies)
-│   ├── losses/       # Loss functions (DPO, SimPO, ORPO)
-│   ├── schedulers/   # LR schedulers
-│   ├── data/         # Data types and validation
-│   └── config/       # Configuration schemas
+├── training/          # ORPO training pipeline
+│   ├── orpo_pipeline.py    # ORPOPipeline - main orchestration
+│   ├── merge.py            # LoRA adapter merging
+│   ├── mps_utils.py        # Apple Silicon MPS utilities
+│   ├── reward_model.py     # Reward model
+│   ├── adapter_utils.py    # Adapter path management
+│   └── data_quality.py     # Data quality metrics
 │
-├── adapters/          # External integrations
-│   ├── mlx/          # MLX backend
-│   ├── pytorch/      # PyTorch backend
-│   ├── llm/          # LLM API clients
-│   └── tracking/     # Experiment tracking
+├── backends/          # ML framework backends
+│   ├── mlx/          # MLX backend (Apple Silicon)
+│   └── pytorch/      # PyTorch backend (CUDA)
 │
-├── pipelines/         # High-level orchestration
-│   ├── training.py   # Training pipeline
-│   └── evaluation.py # Evaluation pipeline
+├── core/              # Domain logic (no framework deps)
+│   ├── losses/       # Loss functions (ORPO, SimPO, DPO)
+│   ├── schedulers/   # Learning rate schedulers
+│   └── data/         # Data types and validation
 │
-└── infrastructure/    # Cross-cutting concerns
-    ├── logging.py    # Structured logging
-    └── reproducibility.py  # Seed management
+├── evaluation/        # Quiz evaluation pipeline
+├── data_prep/         # Data preparation scripts
+├── export/            # Model export utilities
+├── post_training/     # Post-training merge + eval
+├── models/            # Model configs (YAML)
+├── adapters/          # External integrations (tracking, LLM APIs)
+└── infrastructure/    # Logging, reproducibility
 ```
+
+## Key Classes
+
+| Class | Module | Purpose |
+|-------|--------|---------|
+| `ORPOPipeline` | `src.training.orpo_pipeline` | Main training orchestration |
+| `PipelineConfig` | `src.training.orpo_pipeline` | Training hyperparameters |
+| `TopicProgress` | `src.training.orpo_pipeline` | Per-topic training state |
+| `LoRAMerger` | `src.training.merge` | Adapter merging |
+| `QuizEvaluator` | `src.evaluation` | Post-training evaluation |
 
 ## Design Principles
 
-### 1. Dependency Rule
+**Dependency rule**: Core has no external dependencies. Backends depend on Core, not vice versa. Training pipeline orchestrates both.
 
-**Core** has no external dependencies. It can be tested without ML frameworks.
+**Interface segregation**: Each module exposes minimal interfaces (`BaseLoss`, `ModelInterface`, `TrainerInterface`).
 
-**Adapters** depend on Core, not vice versa.
-
-**Pipelines** orchestrate Core and Adapters.
-
-### 2. Interface Segregation
-
-Each module exposes minimal, focused interfaces:
-
-- `BaseLoss` for loss functions
-- `ModelInterface` for models
-- `TrainerInterface` for trainers
-
-### 3. Dependency Injection
-
-Dependencies are injected, not imported:
+**Dependency injection**: Losses and backends are injected, not hard-coded:
 
 ```python
-# Good: Inject loss function
-trainer = Trainer(model, loss_fn=SimPOLoss(config))
-
-# Bad: Hard-coded dependency
-trainer = Trainer(model)  # Uses DPO internally
+trainer = Trainer(model, loss_fn=ORPOLoss(config))
 ```
 
 ## Data Flow
 
 ```
-CLI → Pipeline → Adapter → Core → Adapter → Pipeline → Output
+CLI (run_orpo_training.py)
+  → ORPOPipeline
+    → Backend (MLX/PyTorch)
+      → ORPOLoss (core)
+      → LoRA adapters
+    → QuizEvaluator (evaluation)
+    → Checkpoint save/resume
 ```
 
-Example:
-```
-run_orpo_training.py
-  → TrainingPipeline
-    → MLXTrainer (adapter)
-      → SimPOLoss (core)
-        → MLXModel (adapter)
-          → TrainingPipeline
-            → WandBTracker (adapter)
-```
+## Testing
 
-## Testing Strategy
-
-- **Unit tests**: Test Core modules in isolation
-- **Integration tests**: Test Adapter + Core interactions
-- **E2E tests**: Test full Pipeline
-
-## Benefits
-
-1. **Testability**: Core logic tested without ML frameworks
-2. **Flexibility**: Swap backends/losses without changing pipelines
-3. **Maintainability**: Clear boundaries, easy to understand
-4. **Extensibility**: Add new losses/backends without touching existing code
+- **Unit tests** (`tests/unit/`): Core modules in isolation, no ML frameworks
+- **Integration tests** (`tests/integration/`): Backend + training interactions
+- **Data quality tests**: Validate preference data source attribution

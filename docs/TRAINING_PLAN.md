@@ -34,7 +34,6 @@ This plan covers training the Bob Loukas curriculum dataset (10 topics) using th
 - [ ] **Curriculum data exists**: `data/bob_loukas/textbook/`
 - [ ] **Data files present**:
   - `preference_data.jsonl` (~223KB)
-  - `sft_data.jsonl` (~163KB)
   - `curriculum.yaml` (if exists)
 - [ ] **Data integrity**: Verify files are not corrupted
 

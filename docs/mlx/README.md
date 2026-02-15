@@ -92,8 +92,7 @@ Located in `src/backends/mlx/`:
 - `mlx_backend.py` - Main backend implementation
 - `mlx_model.py` - Model wrapper with `tree_flatten` parameter counting
 - `mlx_adapter_manager.py` - LoRA adapter operations using `linear_to_lora_layers()`
-- `mlx_sft_trainer.py` - SFT training loop with `nn.value_and_grad()`
-- `mlx_dpo_trainer.py` - DPO training loop
+- `mlx_sft_trainer.py` - Training loop with `nn.value_and_grad()`
 - `mlx_device_manager.py` - Unified memory management
 
 ### Test Files
