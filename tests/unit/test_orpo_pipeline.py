@@ -431,3 +431,48 @@ class TestEvaluationIntegration:
         result = pipeline._evaluate_topic(topic_data)
         assert "accuracy" in result
         assert "voice_score" in result
+
+    @patch("src.training.orpo_pipeline.QuizEvaluator")
+    def test_evaluate_topic_prefers_holdout_pairs_over_training_pairs(
+        self, mock_evaluator_cls: MagicMock, mock_model, mock_tokenizer
+    ) -> None:
+        mock_evaluator = MagicMock()
+        mock_evaluator.evaluate.return_value = {
+            "accuracy": 0.9,
+            "voice_score": 0.8,
+            "passed": True,
+        }
+        mock_evaluator_cls.return_value = mock_evaluator
+
+        pipeline = ORPOPipeline(mock_model, mock_tokenizer, PipelineConfig())
+        topic_data = {
+            "topic_id": "t1",
+            "preference_pairs": [
+                {"prompt": "Train Q?", "chosen": "Train A", "rejected": "Bad"}
+            ],
+            "holdout_pairs": [
+                {"prompt": "Holdout Q?", "chosen": "Holdout A", "rejected": "Bad"}
+            ],
+        }
+        _ = pipeline._evaluate_topic(topic_data)
+
+        questions_arg = mock_evaluator.evaluate.call_args[0][0]
+        assert questions_arg[0]["question"] == "Holdout Q?"
+        assert questions_arg[0]["reference_answer"] == "Holdout A"
+
+    @patch("src.training.orpo_pipeline.QuizEvaluator")
+    def test_evaluate_topic_requires_holdout_questions(
+        self, mock_evaluator_cls: MagicMock, mock_model, mock_tokenizer
+    ) -> None:
+        pipeline = ORPOPipeline(mock_model, mock_tokenizer, PipelineConfig())
+        topic_data = {
+            "topic_id": "t1",
+            "preference_pairs": [
+                {"prompt": "Train Q?", "chosen": "Train A", "rejected": "Bad"}
+            ],
+        }
+        result = pipeline._evaluate_topic(topic_data)
+
+        mock_evaluator_cls.assert_not_called()
+        assert result["passed"] is False
+        assert result["holdout_examples"] == 0

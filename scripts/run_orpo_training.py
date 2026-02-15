@@ -20,8 +20,11 @@ import argparse
 import json
 import logging
 import sys
+import hashlib
+import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Any, Dict
 
 import yaml
 
@@ -31,6 +34,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.training import (
     PipelineConfig,
     ORPOPipeline,
+)
+from src.infrastructure import (
+    set_seed,
+    hash_config,
+    get_reproducibility_info,
 )
 
 # Try to import backends (optional)
@@ -147,6 +155,13 @@ def load_config(config_path: str) -> Tuple[PipelineConfig, str]:
         early_stopping_patience=pipeline_config.get("early_stopping_patience", 3),
         early_stopping_cv_threshold=pipeline_config.get("early_stopping_cv_threshold", 15.0),
         early_stopping_min_topics=pipeline_config.get("early_stopping_min_topics", 10),
+        # Deterministic split + gating
+        split_seed=pipeline_config.get("split_seed", 42),
+        holdout_ratio=pipeline_config.get("holdout_ratio", 0.2),
+        holdout_min_examples_per_topic=pipeline_config.get(
+            "holdout_min_examples_per_topic", 1
+        ),
+        require_holdout_for_gate=pipeline_config.get("require_holdout_for_gate", True),
         # Paths
         data_dir=config_dict.get("paths", {}).get("data_dir", "./data"),
         output_dir=config_dict.get("paths", {}).get("output_dir", "./output"),
@@ -257,6 +272,102 @@ def validate_training_dataset(data_dir: str) -> Tuple[int, int]:
     return total_records, valid_records
 
 
+def hash_file_sha256(path: Path) -> str:
+    """Compute SHA256 for a file path."""
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def get_git_sha() -> str:
+    """Get current git commit SHA."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.strip()
+    except Exception:
+        return "unknown"
+
+
+def load_pipeline_stats(data_dir: str) -> Optional[Dict[str, Any]]:
+    """Load optional data-prep stats if available."""
+    stats_path = Path(data_dir) / "pipeline_stats.json"
+    if not stats_path.exists():
+        return None
+    try:
+        with open(stats_path) as f:
+            stats = json.load(f)
+        if isinstance(stats, dict):
+            return stats
+    except Exception as exc:
+        logger.warning(f"Could not parse pipeline stats at {stats_path}: {exc}")
+    return None
+
+
+def write_run_manifest(
+    *,
+    pipeline: ORPOPipeline,
+    config: PipelineConfig,
+    config_path: str,
+    model_name: str,
+    total_pairs: int,
+    valid_pairs: int,
+    result: Any,
+    gate_result: Dict[str, Any],
+) -> Path:
+    """
+    Persist full run lineage and gating metadata for reproducibility.
+
+    Manifest includes config/data hashes, split assignment manifest,
+    environment metadata, and promotion gate verdict.
+    """
+    data_path = Path(config.data_dir) / "preference_data.jsonl"
+    data_hash = hash_file_sha256(data_path) if data_path.exists() else "missing"
+    output_dir = Path(config.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    manifest = {
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        "run": {
+            "config_path": config_path,
+            "model_name": model_name,
+            "backend_type": config.backend_type,
+            "backend_device": config.backend_device,
+            "backend_dtype": config.backend_dtype,
+        },
+        "reproducibility": {
+            "seed": config.split_seed,
+            "config_hash": hash_config(config),
+            "git_sha": get_git_sha(),
+            "environment": get_reproducibility_info(),
+        },
+        "data": {
+            "data_dir": config.data_dir,
+            "preference_data_path": str(data_path),
+            "preference_data_sha256": data_hash,
+            "total_pairs": total_pairs,
+            "valid_pairs": valid_pairs,
+            "split_manifest": pipeline.get_split_manifest(),
+            "pipeline_stats": load_pipeline_stats(config.data_dir),
+        },
+        "results": {
+            "training": result.to_dict(),
+            "promotion_gate": gate_result,
+        },
+    }
+
+    manifest_path = output_dir / "run_manifest.json"
+    with open(manifest_path, "w") as f:
+        json.dump(manifest, f, indent=2)
+    return manifest_path
+
+
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
@@ -325,6 +436,9 @@ def main():
     if args.output_dir:
         config.output_dir = args.output_dir
 
+    set_seed(config.split_seed)
+    logger.info(f"Deterministic seed set to {config.split_seed}")
+
     # Determine mode
     # ORPO training requires backend mode - enforce it
     use_backend = config.backend_type is not None and BACKENDS_AVAILABLE
@@ -353,6 +467,13 @@ def main():
         logger.info(f"ORPO target modules: {config.orpo_target_modules}")
         logger.info(f"Accuracy threshold: {config.accuracy_threshold}")
         logger.info(f"Topic pass threshold: {config.topic_pass_threshold}")
+        logger.info(f"Split seed: {config.split_seed}")
+        logger.info(f"Holdout ratio: {config.holdout_ratio}")
+        logger.info(
+            "Holdout min examples/topic: "
+            f"{config.holdout_min_examples_per_topic}"
+        )
+        logger.info(f"Require holdout for gate: {config.require_holdout_for_gate}")
         logger.info(f"Data dir: {config.data_dir}")
         logger.info(f"Output dir: {config.output_dir}")
         logger.info(f"Checkpoint dir: {config.checkpoint_dir}")
@@ -383,6 +504,7 @@ def main():
     backend = None
     model = None
     tokenizer = None
+    model_name = args.model
 
     if use_backend:
         # Backend mode
@@ -395,13 +517,15 @@ def main():
             config.backend_type,
             device=config.backend_device,
             dtype=config.backend_dtype,
+            seed=config.split_seed,
         )
         logger.info(f"Backend created: {backend.name}")
 
         # Load model name from config
-        with open(args.config) as f:
-            config_dict = yaml.safe_load(f)
-            model_name = config_dict.get("model", {}).get("name", args.model)
+        if Path(args.config).exists():
+            with open(args.config) as f:
+                config_dict = yaml.safe_load(f)
+                model_name = config_dict.get("model", {}).get("name", args.model)
 
         logger.info(f"Loading model via backend: {model_name}")
 
@@ -485,11 +609,40 @@ def main():
     if result.failed_topics:
         logger.warning(f"Failed topics: {result.failed_topics}")
 
+    gate_result = pipeline.build_promotion_gate(result)
+    logger.info(
+        "Promotion gate verdict: "
+        f"{'PASS' if gate_result.get('passed') else 'FAIL'}"
+    )
+    if gate_result.get("failed_conditions"):
+        logger.warning(
+            "Promotion gate failed conditions: "
+            f"{gate_result['failed_conditions']}"
+        )
+
     # Save final checkpoint
-    pipeline.save_checkpoint({
+    checkpoint_path = pipeline.save_checkpoint({
         "result": result.to_dict(),
         "status": "complete",
+        "promotion_gate": gate_result,
+        "split_summary": pipeline.get_split_manifest().get("summary", {}),
     })
+    logger.info(f"Saved final checkpoint: {checkpoint_path}")
+
+    try:
+        manifest_path = write_run_manifest(
+            pipeline=pipeline,
+            config=config,
+            config_path=args.config,
+            model_name=model_name,
+            total_pairs=total_pairs,
+            valid_pairs=valid_pairs,
+            result=result,
+            gate_result=gate_result,
+        )
+        logger.info(f"Wrote run manifest: {manifest_path}")
+    except Exception as exc:
+        logger.warning(f"Failed to write run manifest: {exc}")
 
     # Clear cache
     if use_backend and backend is not None:

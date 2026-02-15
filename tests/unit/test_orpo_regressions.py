@@ -7,6 +7,7 @@ from src.training.orpo_pipeline import (
     ChapterProgress,
     ORPOPipeline,
     PipelineConfig,
+    PipelineResult,
     TopicProgress,
     TopicStatus,
     UnitProgress,
@@ -44,6 +45,7 @@ def test_resume_failed_topics_do_not_trigger_early_stopping(tmp_path) -> None:
         early_stopping_cv_threshold=15.0,
         early_stopping_min_topics=1,
         merge_after_unit=False,
+        require_holdout_for_gate=False,
         data_dir=str(tmp_path / "data"),
         output_dir=str(tmp_path / "out"),
         checkpoint_dir=str(tmp_path / "ckpt"),
@@ -82,7 +84,22 @@ def test_resume_failed_topics_do_not_trigger_early_stopping(tmp_path) -> None:
 
     with (
         patch.object(pipeline, "_load_preference_data", return_value=[]),
-        patch.object(pipeline, "_group_data_by_topic", return_value={}),
+        patch.object(
+            pipeline,
+            "_build_split_groups",
+            return_value=(
+                {},
+                {
+                    "summary": {
+                        "total_records": 0,
+                        "train_records": 0,
+                        "holdout_records": 0,
+                        "total_topics": 0,
+                        "topics_without_holdout": [],
+                    }
+                },
+            ),
+        ),
         patch.object(pipeline, "_organize_curriculum", return_value=curriculum),
         patch.object(
             pipeline,
@@ -95,3 +112,102 @@ def test_resume_failed_topics_do_not_trigger_early_stopping(tmp_path) -> None:
     assert train_topic_mock.call_count == 1
     assert result.total_topics == 3
 
+
+def test_split_is_deterministic_and_leak_free(tmp_path) -> None:
+    """Deterministic split must be stable and produce disjoint train/holdout sets."""
+    config = PipelineConfig(
+        split_seed=7,
+        holdout_ratio=0.4,
+        holdout_min_examples_per_topic=1,
+        require_holdout_for_gate=False,
+        data_dir=str(tmp_path / "data"),
+        output_dir=str(tmp_path / "out"),
+        checkpoint_dir=str(tmp_path / "ckpt"),
+    )
+    pipeline = ORPOPipeline(model=object(), tokenizer=_mock_tokenizer(), config=config)
+
+    topic_id = "episode-2026-02-01"
+    preference_data = [
+        {
+            "source": topic_id,
+            "prompt": f"Q{i}",
+            "chosen": f"A{i}",
+            "rejected": f"R{i}",
+        }
+        for i in range(6)
+    ]
+
+    grouped_a, manifest_a = pipeline._build_split_groups(preference_data)
+    grouped_b, manifest_b = pipeline._build_split_groups(preference_data)
+
+    assert manifest_a["summary"]["assignment_digest"] == manifest_b["summary"]["assignment_digest"]
+    topic_manifest = manifest_a["topics"][topic_id]
+    train_ids = set(topic_manifest["train_record_ids"])
+    holdout_ids = set(topic_manifest["holdout_record_ids"])
+    assert train_ids.isdisjoint(holdout_ids)
+    assert len(grouped_a[topic_id]["holdout_pairs"]) >= 1
+    assert len(grouped_a[topic_id]["preference_pairs"]) >= 1
+
+
+def test_train_curriculum_fails_when_holdout_required_but_unavailable(tmp_path) -> None:
+    """Holdout-required mode should fail fast when a topic cannot produce holdout records."""
+    config = PipelineConfig(
+        split_seed=42,
+        holdout_ratio=0.5,
+        holdout_min_examples_per_topic=1,
+        require_holdout_for_gate=True,
+        merge_after_unit=False,
+        data_dir=str(tmp_path / "data"),
+        output_dir=str(tmp_path / "out"),
+        checkpoint_dir=str(tmp_path / "ckpt"),
+    )
+    pipeline = ORPOPipeline(model=object(), tokenizer=_mock_tokenizer(), config=config)
+
+    preference_data = [
+        {
+            "source": "episode-2026-02-10",
+            "prompt": "Only sample",
+            "chosen": "Answer",
+            "rejected": "Bad",
+        }
+    ]
+
+    result = pipeline.train_curriculum(preference_data=preference_data)
+    assert result.success is False
+    assert result.total_topics == 0
+
+
+def test_promotion_gate_reports_threshold_reasons(tmp_path) -> None:
+    """Promotion gate should provide explicit threshold failure reasons."""
+    config = PipelineConfig(
+        accuracy_threshold=0.7,
+        topic_pass_threshold=0.9,
+        data_dir=str(tmp_path / "data"),
+        output_dir=str(tmp_path / "out"),
+        checkpoint_dir=str(tmp_path / "ckpt"),
+    )
+    pipeline = ORPOPipeline(model=object(), tokenizer=_mock_tokenizer(), config=config)
+
+    pipeline.topic_gate_details = {
+        "topic-1": {
+            "topic_id": "topic-1",
+            "status": "failed",
+            "accuracy": 0.5,
+            "voice_score": 0.6,
+            "combined_score": 0.55,
+            "train_examples": 10,
+            "holdout_examples": 2,
+            "gate_reason": "",
+        }
+    }
+    result = PipelineResult(
+        success=False,
+        total_topics=1,
+        passed_topics=0,
+        failed_topics=["topic-1"],
+        total_training_time_hours=0.1,
+    )
+
+    gate = pipeline.build_promotion_gate(result)
+    assert gate["passed"] is False
+    assert any("avg_accuracy_below_threshold" in reason for reason in gate["failed_conditions"])

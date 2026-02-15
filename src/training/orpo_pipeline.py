@@ -11,7 +11,7 @@ Optimized for Apple Silicon (MLX backend) and PyTorch backends.
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Tuple
 from enum import Enum
 from datetime import datetime
 import logging
@@ -19,6 +19,7 @@ import re
 import time
 import json
 import traceback
+import hashlib
 
 try:
     from transformers import PreTrainedModel, PreTrainedTokenizer
@@ -98,6 +99,12 @@ class PipelineConfig:
     early_stopping_patience: int = 3  # Stop if loss CV < threshold for N topics
     early_stopping_cv_threshold: float = 15.0  # Coefficient of variation threshold (%)
     early_stopping_min_topics: int = 10  # Minimum topics before early stopping applies
+
+    # Deterministic split + evaluation gating
+    split_seed: int = 42
+    holdout_ratio: float = 0.2
+    holdout_min_examples_per_topic: int = 1
+    require_holdout_for_gate: bool = True
 
     # Paths
     data_dir: str = "./data"
@@ -330,6 +337,9 @@ class ORPOPipeline:
         # Progress tracking
         self.units: List[UnitProgress] = []
         self.start_time: float = 0.0
+        self.last_split_manifest: Dict[str, Any] = {}
+        self.last_gate_result: Dict[str, Any] = {}
+        self.topic_gate_details: Dict[str, Dict[str, Any]] = {}
 
         logger.info(
             f"ORPOPipeline initialized in {'backend' if self.use_backend else 'legacy'} mode"
@@ -353,6 +363,7 @@ class ORPOPipeline:
         """
         self.start_time = time.time()
         self.units = []
+        self.topic_gate_details = {}
 
         # Restore from checkpoint so we skip completed topics (do not pre-fill self.units)
         progress_map: Dict[str, TopicProgress] = {}
@@ -384,8 +395,19 @@ class ORPOPipeline:
             if preference_data is None:
                 preference_data = self._load_preference_data()
 
-            # Group data by topic
-            grouped_data = self._group_data_by_topic(preference_data)
+            # Deterministic train/holdout split by topic, then group for training.
+            grouped_data, split_manifest = self._build_split_groups(preference_data)
+            self.last_split_manifest = split_manifest
+            self._validate_split_manifest(split_manifest)
+
+            split_summary = split_manifest.get("summary", {})
+            logger.info(
+                "Deterministic split complete: "
+                f"topics={split_summary.get('total_topics', 0)}, "
+                f"train_records={split_summary.get('train_records', 0)}, "
+                f"holdout_records={split_summary.get('holdout_records', 0)}, "
+                f"seed={self.config.split_seed}, ratio={self.config.holdout_ratio}"
+            )
 
             # Organize into units/chapters/topics
             curriculum = self._organize_curriculum(grouped_data)
@@ -653,6 +675,8 @@ class ORPOPipeline:
             eval_result = self._evaluate_topic(topic_data)
             progress.accuracy_score = eval_result.get("accuracy", 0.0)
             progress.voice_score = eval_result.get("voice_score", 0.0)
+            holdout_examples = int(eval_result.get("holdout_examples", 0))
+            gate_reason = str(eval_result.get("gate_reason", ""))
 
             # 3. Final pass/fail determination
             combined_score = (progress.accuracy_score + progress.voice_score) / 2
@@ -666,6 +690,17 @@ class ORPOPipeline:
                     progress.status = TopicStatus.FAILED
                 else:
                     progress.status = TopicStatus.FAILED
+
+            self.topic_gate_details[topic_id] = {
+                "topic_id": topic_id,
+                "status": progress.status.value,
+                "accuracy": progress.accuracy_score,
+                "voice_score": progress.voice_score,
+                "combined_score": combined_score,
+                "train_examples": len(preference_pairs),
+                "holdout_examples": holdout_examples,
+                "gate_reason": gate_reason,
+            }
 
             progress.training_time_seconds = time.time() - start_time
 
@@ -699,35 +734,52 @@ class ORPOPipeline:
             Dict with accuracy and voice_score
         """
         try:
-            evaluator = QuizEvaluator(self.model, self.tokenizer)
-
             questions = topic_data.get("questions", [])
-            if not questions:
-                # Create questions from preference pairs (prompt=question, chosen=reference)
-                preference_pairs = topic_data.get("preference_pairs", [])
+            holdout_pairs = topic_data.get("holdout_pairs", [])
+            if holdout_pairs:
                 questions = [
                     {
-                        "question": p.get("prompt", ""),
-                        "reference_answer": p.get("chosen", ""),
+                        "question": pair.get("prompt", ""),
+                        "reference_answer": pair.get("chosen", ""),
                     }
-                    for p in preference_pairs
-                    if p.get("prompt") and p.get("chosen")
+                    for pair in holdout_pairs
+                    if pair.get("prompt") and pair.get("chosen")
                 ]
 
             if not questions:
-                return {"accuracy": 0.0, "voice_score": 0.0, "passed": False}
+                reason = (
+                    "No holdout evaluation questions available for topic. "
+                    "Training-pair fallback is disabled for promotion gating."
+                )
+                logger.warning(reason)
+                return {
+                    "accuracy": 0.0,
+                    "voice_score": 0.0,
+                    "passed": False,
+                    "holdout_examples": 0,
+                    "gate_reason": reason,
+                }
 
+            evaluator = QuizEvaluator(self.model, self.tokenizer)
             result = evaluator.evaluate(questions)
 
             return {
                 "accuracy": result.get("accuracy", 0.0),
                 "voice_score": result.get("voice_score", 0.0),
                 "passed": result.get("passed", False),
+                "holdout_examples": len(questions),
+                "gate_reason": "",
             }
 
         except Exception as e:
             logger.error(f"Evaluation failed: {e}")
-            return {"accuracy": 0.0, "voice_score": 0.0, "passed": False}
+            return {
+                "accuracy": 0.0,
+                "voice_score": 0.0,
+                "passed": False,
+                "holdout_examples": 0,
+                "gate_reason": f"evaluation_error: {e}",
+            }
 
     def _merge_unit_adapters(self, unit_progress: UnitProgress) -> None:
         """
@@ -886,6 +938,164 @@ class ORPOPipeline:
         logger.info(f"Loaded {len(data)} preference pairs")
         return data
 
+    def _build_split_groups(
+        self,
+        preference_data: List[Dict],
+    ) -> Tuple[Dict[str, Dict], Dict[str, Any]]:
+        """
+        Build deterministic train/holdout split grouped by topic.
+
+        Returns:
+            Tuple of:
+            - grouped topic dict for training (includes holdout_pairs per topic)
+            - split manifest with policy, per-topic assignment hashes, and summary
+        """
+        if not 0.0 <= self.config.holdout_ratio < 1.0:
+            raise ValueError(
+                f"holdout_ratio must be in [0, 1), got {self.config.holdout_ratio}"
+            )
+        if self.config.holdout_min_examples_per_topic < 0:
+            raise ValueError(
+                "holdout_min_examples_per_topic must be >= 0, got "
+                f"{self.config.holdout_min_examples_per_topic}"
+            )
+
+        records_by_topic: Dict[str, List[Dict]] = {}
+        for item in preference_data:
+            topic_id = self._extract_topic_id(item)
+            records_by_topic.setdefault(topic_id, []).append(item)
+
+        grouped: Dict[str, Dict] = {}
+        manifest_topics: Dict[str, Any] = {}
+        topics_without_holdout: List[str] = []
+        total_train = 0
+        total_holdout = 0
+
+        for topic_id in sorted(records_by_topic.keys()):
+            topic_records = records_by_topic[topic_id]
+            scored_records: List[Tuple[int, str, Dict]] = []
+            for record in topic_records:
+                record_id = self._record_fingerprint(record)
+                score_input = f"{self.config.split_seed}:{topic_id}:{record_id}"
+                score = int(hashlib.sha256(score_input.encode("utf-8")).hexdigest(), 16)
+                scored_records.append((score, record_id, record))
+
+            scored_records.sort(key=lambda item: item[0])
+            holdout_target = self._target_holdout_count(len(scored_records))
+            holdout_records = scored_records[:holdout_target]
+            train_records = scored_records[holdout_target:]
+
+            train_ids = [item[1] for item in train_records]
+            holdout_ids = [item[1] for item in holdout_records]
+            overlap = set(train_ids).intersection(holdout_ids)
+            if overlap:
+                raise ValueError(
+                    f"Split leakage detected for topic {topic_id}: overlap={sorted(overlap)}"
+                )
+
+            if not holdout_ids:
+                topics_without_holdout.append(topic_id)
+
+            train_pairs = [item[2] for item in train_records]
+            holdout_pairs = [item[2] for item in holdout_records]
+
+            grouped[topic_id] = {
+                "topic_id": topic_id,
+                "preference_pairs": train_pairs,
+                "holdout_pairs": holdout_pairs,
+            }
+
+            total_train += len(train_pairs)
+            total_holdout += len(holdout_pairs)
+
+            manifest_topics[topic_id] = {
+                "total_records": len(topic_records),
+                "train_records": len(train_pairs),
+                "holdout_records": len(holdout_pairs),
+                "train_record_ids": train_ids,
+                "holdout_record_ids": holdout_ids,
+                "train_assignment_hash": hashlib.sha256(
+                    json.dumps(sorted(train_ids)).encode("utf-8")
+                ).hexdigest(),
+                "holdout_assignment_hash": hashlib.sha256(
+                    json.dumps(sorted(holdout_ids)).encode("utf-8")
+                ).hexdigest(),
+            }
+
+        split_manifest = {
+            "policy": {
+                "split_seed": self.config.split_seed,
+                "holdout_ratio": self.config.holdout_ratio,
+                "holdout_min_examples_per_topic": self.config.holdout_min_examples_per_topic,
+                "require_holdout_for_gate": self.config.require_holdout_for_gate,
+            },
+            "summary": {
+                "total_records": len(preference_data),
+                "train_records": total_train,
+                "holdout_records": total_holdout,
+                "total_topics": len(records_by_topic),
+                "topics_without_holdout": topics_without_holdout,
+            },
+            "topics": manifest_topics,
+        }
+        split_manifest["summary"]["assignment_digest"] = hashlib.sha256(
+            json.dumps(split_manifest["topics"], sort_keys=True).encode("utf-8")
+        ).hexdigest()
+
+        return grouped, split_manifest
+
+    def _validate_split_manifest(self, split_manifest: Dict[str, Any]) -> None:
+        """Validate split before training to avoid leakage and weak promotion gates."""
+        if not self.config.require_holdout_for_gate:
+            return
+
+        summary = split_manifest.get("summary", {})
+        topics_without_holdout = summary.get("topics_without_holdout", [])
+        if topics_without_holdout:
+            raise ValueError(
+                "Holdout gating is enabled but some topics have no holdout records: "
+                f"{topics_without_holdout}. "
+                "Increase data per topic, lower holdout_min_examples_per_topic, "
+                "or disable require_holdout_for_gate."
+            )
+
+        if summary.get("holdout_records", 0) <= 0:
+            raise ValueError(
+                "Holdout gating is enabled but split produced zero holdout records."
+            )
+
+    def _target_holdout_count(self, total_records: int) -> int:
+        """Compute deterministic holdout target while keeping at least one train item."""
+        if total_records <= 1:
+            return 0
+
+        ratio_target = int(total_records * self.config.holdout_ratio)
+        if self.config.holdout_ratio > 0 and ratio_target == 0:
+            ratio_target = 1
+
+        holdout_target = max(
+            ratio_target,
+            self.config.holdout_min_examples_per_topic,
+        )
+        holdout_target = min(holdout_target, total_records - 1)
+        return max(0, holdout_target)
+
+    @staticmethod
+    def _record_fingerprint(record: Dict) -> str:
+        """Stable hash for split assignment and manifest lineage."""
+        canonical = json.dumps(
+            {
+                "topic_id": record.get("topic_id"),
+                "source": record.get("source"),
+                "prompt": record.get("prompt"),
+                "chosen": record.get("chosen"),
+                "rejected": record.get("rejected"),
+            },
+            sort_keys=True,
+            ensure_ascii=True,
+        )
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
     def _group_data_by_topic(
         self,
         preference_data: Optional[List[Dict]] = None,
@@ -915,6 +1125,89 @@ class ORPOPipeline:
             grouped[topic_id]["preference_pairs"].append(item)
 
         return grouped
+
+    def get_split_manifest(self) -> Dict[str, Any]:
+        """Return split manifest generated for the latest training run."""
+        return self.last_split_manifest
+
+    def build_promotion_gate(self, result: PipelineResult) -> Dict[str, Any]:
+        """
+        Build explicit promotion gate verdict based on holdout-only evaluation.
+
+        Gate checks:
+        - no failed topics
+        - required holdout coverage exists
+        - mean holdout accuracy meets threshold
+        - mean holdout combined score meets topic pass threshold
+        """
+        topic_details = [
+            self.topic_gate_details[topic_id]
+            for topic_id in sorted(self.topic_gate_details.keys())
+        ]
+        holdout_topics = [
+            detail for detail in topic_details if detail.get("holdout_examples", 0) > 0
+        ]
+
+        avg_accuracy = (
+            sum(detail["accuracy"] for detail in holdout_topics) / len(holdout_topics)
+            if holdout_topics else 0.0
+        )
+        avg_voice = (
+            sum(detail["voice_score"] for detail in holdout_topics) / len(holdout_topics)
+            if holdout_topics else 0.0
+        )
+        avg_combined = (
+            sum(detail["combined_score"] for detail in holdout_topics) / len(holdout_topics)
+            if holdout_topics else 0.0
+        )
+
+        failed_conditions: List[str] = []
+        if result.failed_topics:
+            failed_conditions.append(
+                f"failed_topics_present ({len(result.failed_topics)}): {result.failed_topics}"
+            )
+        if self.config.require_holdout_for_gate and not holdout_topics:
+            failed_conditions.append("no_holdout_topics_available")
+        if holdout_topics and avg_accuracy < self.config.accuracy_threshold:
+            failed_conditions.append(
+                f"avg_accuracy_below_threshold ({avg_accuracy:.4f} < {self.config.accuracy_threshold:.4f})"
+            )
+        if holdout_topics and avg_combined < self.config.topic_pass_threshold:
+            failed_conditions.append(
+                "avg_combined_below_threshold "
+                f"({avg_combined:.4f} < {self.config.topic_pass_threshold:.4f})"
+            )
+
+        topics_with_gate_errors = [
+            detail["topic_id"]
+            for detail in topic_details
+            if detail.get("gate_reason")
+        ]
+        if topics_with_gate_errors:
+            failed_conditions.append(
+                "topics_with_gate_errors: "
+                f"{topics_with_gate_errors}"
+            )
+
+        gate = {
+            "status": "pass" if not failed_conditions else "fail",
+            "passed": not failed_conditions,
+            "thresholds": {
+                "accuracy_threshold": self.config.accuracy_threshold,
+                "topic_pass_threshold": self.config.topic_pass_threshold,
+            },
+            "metrics": {
+                "holdout_topics_evaluated": len(holdout_topics),
+                "avg_holdout_accuracy": avg_accuracy,
+                "avg_holdout_voice_score": avg_voice,
+                "avg_holdout_combined_score": avg_combined,
+            },
+            "failed_conditions": failed_conditions,
+            "topics": topic_details,
+            "result_failed_topics": result.failed_topics,
+        }
+        self.last_gate_result = gate
+        return gate
 
     @staticmethod
     def _extract_topic_id(item: Dict) -> str:
