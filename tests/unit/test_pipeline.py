@@ -14,6 +14,7 @@ from pathlib import Path
 import json
 import tempfile
 import shutil
+from unittest.mock import MagicMock
 
 from src.data_prep.pipeline import DataPipeline, PipelineConfig, PipelineStats
 from src.data_prep.textbook_parser import Question, TopicQuiz, ChapterTest, UnitExam
@@ -296,6 +297,89 @@ class TestTranscriptHierarchySynthesis:
         assert len(unit_exams) == 1
         assert unit_exams[0].unit == "unit-2026"
         assert len(unit_exams[0].questions) == 2
+
+
+class TestTranscriptAugmentation:
+    """Test transcript LLM augmentation path."""
+
+    def test_augment_transcript_questions_increases_count(
+        self, temp_output_dir: str, fixtures_path: Path
+    ) -> None:
+        config = PipelineConfig(
+            textbook_path=str(fixtures_path),
+            output_path=temp_output_dir,
+            augment_questions=False,
+            target_questions_per_episode=5,
+        )
+        pipeline = DataPipeline(config)
+
+        with tempfile.TemporaryDirectory() as transcript_dir:
+            raw = Path(transcript_dir) / "raw"
+            raw.mkdir(parents=True, exist_ok=True)
+            (raw / "2026-01-01T10-00-00Z.txt").write_text(
+                "Bob talks about cycle structure and risk.", encoding="utf-8"
+            )
+
+            pipeline.transcript_processor = MagicMock()
+            pipeline.transcript_processor.transcripts_dir = Path(transcript_dir)
+            pipeline.transcript_processor.parse_transcript.return_value = (
+                "Bob talks about cycle structure and risk."
+            )
+            pipeline.transcript_processor.load_episode_summary.return_value = None
+
+            pipeline.transcript_question_gen = MagicMock()
+            pipeline.transcript_question_gen.generate_for_episode.return_value = [
+                Question(question=f"Generated Q{i}", reference_answer=f"A{i}", source="episode-2026-01-01")
+                for i in range(5)
+            ]
+
+            base = [
+                Question(question="Base Q1", reference_answer="A1", source="episode-2026-01-01"),
+                Question(question="Base Q2", reference_answer="A2", source="episode-2026-01-01"),
+                Question(question="Base Q3", reference_answer="A3", source="episode-2026-01-01"),
+            ]
+
+            augmented = pipeline._augment_transcript_questions(base)
+            assert len(augmented) == 5
+
+    def test_augment_transcript_questions_fallback_on_error(
+        self, temp_output_dir: str, fixtures_path: Path
+    ) -> None:
+        config = PipelineConfig(
+            textbook_path=str(fixtures_path),
+            output_path=temp_output_dir,
+            augment_questions=False,
+            target_questions_per_episode=5,
+        )
+        pipeline = DataPipeline(config)
+
+        with tempfile.TemporaryDirectory() as transcript_dir:
+            raw = Path(transcript_dir) / "raw"
+            raw.mkdir(parents=True, exist_ok=True)
+            (raw / "2026-01-01T10-00-00Z.txt").write_text(
+                "Bob talks about cycle structure and risk.", encoding="utf-8"
+            )
+
+            pipeline.transcript_processor = MagicMock()
+            pipeline.transcript_processor.transcripts_dir = Path(transcript_dir)
+            pipeline.transcript_processor.parse_transcript.return_value = (
+                "Bob talks about cycle structure and risk."
+            )
+            pipeline.transcript_processor.load_episode_summary.return_value = None
+
+            pipeline.transcript_question_gen = MagicMock()
+            pipeline.transcript_question_gen.generate_for_episode.side_effect = RuntimeError(
+                "llm failed"
+            )
+
+            base = [
+                Question(question="Base Q1", reference_answer="A1", source="episode-2026-01-01"),
+                Question(question="Base Q2", reference_answer="A2", source="episode-2026-01-01"),
+                Question(question="Base Q3", reference_answer="A3", source="episode-2026-01-01"),
+            ]
+
+            augmented = pipeline._augment_transcript_questions(base)
+            assert len(augmented) == 5
 
 
 class TestOutputSaving:

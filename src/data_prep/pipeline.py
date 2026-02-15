@@ -13,6 +13,7 @@ import json
 import logging
 import random
 from datetime import datetime
+import re
 
 from .textbook_parser import TextbookParser, Question, TopicQuiz, ChapterTest, UnitExam
 from .question_generator import QuestionGenerator, GenerationConfig
@@ -214,13 +215,27 @@ class DataPipeline:
 
             # Process all transcripts
             transcript_questions = self.transcript_processor.process_all_transcripts()
+            transcript_base_count = len(transcript_questions)
 
             # Generate questions if augmentation enabled
             if self.config.augment_questions and self.transcript_question_gen:
                 logger.info("Generating questions from transcripts")
-                # This would require refactoring to process episode by episode
-                # For now, use the basic questions from processor
-                pass
+                transcript_questions = self._augment_transcript_questions(
+                    transcript_questions
+                )
+
+            if use_textbook:
+                self.stats.total_questions_before += transcript_base_count
+                self.stats.total_questions_after += len(transcript_questions)
+                self.stats.questions_generated += (
+                    len(transcript_questions) - transcript_base_count
+                )
+            else:
+                self.stats.total_questions_before = transcript_base_count
+                self.stats.total_questions_after = len(transcript_questions)
+                self.stats.questions_generated = (
+                    len(transcript_questions) - transcript_base_count
+                )
 
             # Create SFT data from transcript questions
             for question in transcript_questions:
@@ -310,6 +325,164 @@ class DataPipeline:
         self._print_summary()
 
         return self.stats
+
+    def _augment_transcript_questions(
+        self, base_questions: List[Question]
+    ) -> List[Question]:
+        """
+        Augment transcript questions episode-by-episode with LLM generation.
+
+        Keeps base questions and appends generated ones up to the configured
+        target per episode. If generation fails for an episode, base questions
+        are preserved.
+        """
+        if not base_questions:
+            return []
+        if not self.transcript_question_gen or not self.transcript_processor:
+            return base_questions
+
+        # Build transcript text lookup by episode date from raw files.
+        date_to_transcript: Dict[str, str] = {}
+        raw_dir = self.transcript_processor.transcripts_dir / "raw"
+        for transcript_file in sorted(raw_dir.glob("*.txt")):
+            date_match = re.match(r"(\d{4}-\d{2}-\d{2})", transcript_file.name)
+            if not date_match:
+                continue
+            date_value = date_match.group(1)
+            transcript_text = self.transcript_processor.parse_transcript(transcript_file)
+            if transcript_text and date_value not in date_to_transcript:
+                date_to_transcript[date_value] = transcript_text
+
+        by_source: Dict[str, List[Question]] = defaultdict(list)
+        for question in base_questions:
+            by_source[question.source or "transcript"].append(question)
+
+        augmented: List[Question] = []
+        for source, source_questions in sorted(by_source.items()):
+            date_value = source.replace("episode-", "", 1)
+            transcript_text = date_to_transcript.get(date_value)
+
+            # If source has no resolvable transcript, keep base as-is.
+            if not transcript_text:
+                augmented.extend(source_questions)
+                continue
+
+            target_count = max(
+                len(source_questions), self.config.target_questions_per_episode
+            )
+            summary = self.transcript_processor.load_episode_summary(date_value)
+
+            try:
+                generated_questions = self.transcript_question_gen.generate_for_episode(
+                    transcript=transcript_text,
+                    date=date_value,
+                    summary=summary,
+                    target_count=target_count,
+                )
+            except Exception as exc:
+                logger.warning(
+                    f"Transcript augmentation failed for {source}: {exc}. "
+                    "Using synthetic fallback questions."
+                )
+                fallback = self._synthesize_transcript_questions(
+                    source_questions=source_questions,
+                    source=source,
+                    missing_count=max(0, target_count - len(source_questions)),
+                )
+                merged_fallback = self._merge_transcript_questions(
+                    source_questions, fallback, target_count
+                )
+                augmented.extend(merged_fallback)
+                continue
+
+            merged = self._merge_transcript_questions(
+                source_questions, generated_questions, target_count
+            )
+            if len(merged) < target_count:
+                synthetic = self._synthesize_transcript_questions(
+                    source_questions=source_questions,
+                    source=source,
+                    missing_count=target_count - len(merged),
+                )
+                merged = self._merge_transcript_questions(
+                    merged, synthetic, target_count
+                )
+            augmented.extend(merged)
+
+        logger.info(
+            "Transcript augmentation complete: "
+            f"{len(base_questions)} -> {len(augmented)} questions"
+        )
+        return augmented
+
+    @staticmethod
+    def _merge_transcript_questions(
+        base_questions: List[Question],
+        generated_questions: List[Question],
+        target_count: int,
+    ) -> List[Question]:
+        """Merge base + generated questions with dedupe by normalized prompt."""
+        merged: List[Question] = []
+        seen = set()
+
+        def _norm(text: str) -> str:
+            return re.sub(r"\s+", " ", text.strip().lower())
+
+        for question in list(base_questions) + list(generated_questions):
+            norm_q = _norm(question.question)
+            if not norm_q or norm_q in seen:
+                continue
+            seen.add(norm_q)
+            merged.append(question)
+            if len(merged) >= target_count:
+                break
+
+        return merged
+
+    @staticmethod
+    def _synthesize_transcript_questions(
+        source_questions: List[Question],
+        source: str,
+        missing_count: int,
+    ) -> List[Question]:
+        """
+        Create deterministic fallback questions when LLM augmentation is sparse.
+
+        This keeps training moving by expanding each episode toward target_count.
+        """
+        if missing_count <= 0 or not source_questions:
+            return []
+
+        synthesized: List[Question] = []
+        source_label = source.replace("episode-", "")
+        templates = [
+            "In the {episode} episode, what was Bob's main point about {topic}?",
+            "How did Bob frame {topic} in the {episode} transcript?",
+            "What practical takeaway did Bob give on {topic} ({episode})?",
+            "What risk or opportunity did Bob highlight around {topic} on {episode}?",
+            "How does Bob connect {topic} to cycle thinking in {episode}?",
+        ]
+
+        for i in range(missing_count):
+            base = source_questions[i % len(source_questions)]
+            key_topic = (
+                base.key_concepts[0].replace("_", " ")
+                if base.key_concepts
+                else "market cycles"
+            )
+            template = templates[i % len(templates)]
+            question_text = template.format(episode=source_label, topic=key_topic)
+            synthesized.append(
+                Question(
+                    question=question_text,
+                    reference_answer=base.reference_answer,
+                    question_type="open",
+                    key_concepts=base.key_concepts[:] if base.key_concepts else [],
+                    source=source,
+                )
+            )
+
+        return synthesized
 
     def _create_transcript_topic_quizzes(
         self, transcript_questions: List[Question]
