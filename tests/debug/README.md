@@ -8,7 +8,7 @@ Comprehensive diagnostic test to investigate why MLX-trained models generate poo
 
 ### Problem
 
-After SFT training with MLX backend:
+After training with MLX backend:
 - Training completes successfully (loss decreases)
 - Base model generates properly (voice score ~0.12)
 - Trained model generates mostly `<|endoftext|>` tokens
@@ -25,7 +25,7 @@ After SFT training with MLX backend:
 
 2. **Training Simulation**
    - Create minimal training data (2 samples)
-   - Run 1 epoch of SFT training
+   - Run 1 epoch of training
    - Force MLX evaluation with multiple methods
    - Verify loss decreases
 
@@ -58,7 +58,7 @@ python3 tests/debug/test_mlx_training_state.py
 Or via SSH on Mac Studio:
 
 ```bash
-ssh memetica-studio@100.87.103.70
+ssh memetica-studio@100.91.229.17
 cd ~/mindprint-model
 export PATH=$PATH:/Users/memetica-studio/Library/Python/3.9/bin
 python3 tests/debug/test_mlx_training_state.py
@@ -93,9 +93,9 @@ The test will output detailed diagnostics including:
 
 ### Key Files Referenced
 
-- `src/backends/mlx/mlx_sft_trainer.py` - Training loop (line 214: `mx.eval()` call)
-- `src/backends/mlx/mlx_model.py` - Generation method (line 84: `mlx_generate()`)
-- `src/evaluation/voice_evaluator.py` - Evaluation logic (line 323: `_generate_answers()`)
+- `src/backends/mlx/mlx_trainer.py` - Training loop
+- `src/backends/mlx/mlx_model.py` - Generation method
+- `src/evaluation/voice_evaluator.py` - Evaluation logic
 
 ### Success Criteria
 

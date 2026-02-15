@@ -71,6 +71,9 @@ site/
 .cache/
 *.cache
 
+# Temp files
+.tmp/
+
 # W&B
 wandb/
 
