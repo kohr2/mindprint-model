@@ -47,6 +47,9 @@ class PipelineConfig:
     min_answer_length: int = 600
     max_answer_length: int = 1200
     min_voice_marker_density: float = 20.0  # Percentage
+    # Transcript bucketing control.
+    # 1 = per-episode topics (legacy behavior), 7 = weekly buckets, 14 = biweekly.
+    transcript_topic_bucket_days: int = 1
 
 
 @dataclass
@@ -240,7 +243,8 @@ class DataPipeline:
             # Create SFT data from transcript questions
             for question in transcript_questions:
                 # Use question.source if set, otherwise default to 'transcript'
-                source = question.source if question.source else 'transcript'
+                raw_source = question.source if question.source else "transcript"
+                source = self._bucket_transcript_source(raw_source)
                 transcript_sft_data.append({
                     "instruction": question.question,
                     "input": "",
@@ -250,7 +254,10 @@ class DataPipeline:
 
             # Create preference pairs
             transcript_preference_pairs = self.preference_gen.generate_all(
-                [(q, q.source or 'transcript') for q in transcript_questions]
+                [
+                    (q, self._bucket_transcript_source(q.source or "transcript"))
+                    for q in transcript_questions
+                ]
             )
 
             # Build transcript evaluation hierarchy (topic/chapter/unit)
@@ -494,26 +501,44 @@ class DataPipeline:
         """
         by_source: Dict[str, List[Question]] = defaultdict(list)
         for question in transcript_questions:
-            source = question.source or "episode-unknown"
+            source = self._bucket_transcript_source(question.source or "episode-unknown")
             by_source[source].append(question)
 
         topic_quizzes: List[TopicQuiz] = []
         for source in sorted(by_source.keys()):
-            date_value = source.replace("episode-", "", 1)
             unit = "unit-transcripts"
             chapter = "chapter-transcripts"
             topic = source.replace("/", "-")
-            title = f"Transcript {date_value}"
+            title = f"Transcript {source}"
 
-            try:
-                parsed_date = datetime.strptime(date_value, "%Y-%m-%d")
+            # Episode (legacy behavior)
+            episode_match = re.match(r"^episode-(\d{4}-\d{2}-\d{2})$", source)
+            if episode_match:
+                parsed_date = datetime.strptime(episode_match.group(1), "%Y-%m-%d")
                 unit = f"unit-{parsed_date.year}"
                 chapter = f"chapter-{parsed_date.month:02d}"
-                topic = f"episode-{parsed_date.strftime('%Y-%m-%d')}"
+                topic = source
                 title = f"Episode {parsed_date.strftime('%Y-%m-%d')}"
-            except ValueError:
-                # Keep fallback structure for non-date transcript sources.
-                pass
+            else:
+                # Weekly buckets: transcript-YYYY-wWW
+                week_match = re.match(r"^transcript-(\d{4})-w(\d{2})$", source)
+                if week_match:
+                    year = int(week_match.group(1))
+                    week = int(week_match.group(2))
+                    unit = f"unit-{year}"
+                    chapter = f"chapter-w{week:02d}"
+                    topic = source
+                    title = f"Transcript Week {year}-W{week:02d}"
+                else:
+                    # Biweekly buckets: transcript-YYYY-bwNN
+                    biweek_match = re.match(r"^transcript-(\d{4})-bw(\d{2})$", source)
+                    if biweek_match:
+                        year = int(biweek_match.group(1))
+                        biweek = int(biweek_match.group(2))
+                        unit = f"unit-{year}"
+                        chapter = f"chapter-bw{biweek:02d}"
+                        topic = source
+                        title = f"Transcript Biweek {year}-BW{biweek:02d}"
 
             topic_quizzes.append(
                 TopicQuiz(
@@ -526,6 +551,40 @@ class DataPipeline:
             )
 
         return topic_quizzes
+
+    def _bucket_transcript_source(self, source: str) -> str:
+        """
+        Map episode-level transcript source to larger buckets when configured.
+
+        - transcript_topic_bucket_days <= 1: keep episode-level source
+        - 7: ISO week buckets (transcript-YYYY-wWW)
+        - 14: biweekly buckets (transcript-YYYY-bwNN)
+        """
+        bucket_days = max(1, int(self.config.transcript_topic_bucket_days))
+        source = (source or "").strip()
+        if bucket_days <= 1:
+            return source
+
+        match = re.match(r"^episode-(\d{4}-\d{2}-\d{2})$", source)
+        if not match:
+            return source
+
+        try:
+            dt = datetime.strptime(match.group(1), "%Y-%m-%d")
+        except ValueError:
+            return source
+
+        iso_year, iso_week, _ = dt.isocalendar()
+        if bucket_days == 7:
+            return f"transcript-{iso_year}-w{iso_week:02d}"
+
+        if bucket_days == 14:
+            biweek = ((iso_week - 1) // 2) + 1
+            return f"transcript-{iso_year}-bw{biweek:02d}"
+
+        # Generic fallback for non-standard bucket sizes.
+        bucket_index = ((iso_week - 1) * 7 // bucket_days) + 1
+        return f"transcript-{iso_year}-b{bucket_days:02d}-{bucket_index:02d}"
 
     def _synthesize_hierarchy_from_topics(
         self, topic_quizzes: List[TopicQuiz]

@@ -264,6 +264,71 @@ class TestTranscriptHierarchySynthesis:
         assert quizzes[0].chapter in {"chapter-01", "chapter-02"}
         assert all(q.topic.startswith("episode-2026-") for q in quizzes)
 
+    def test_weekly_bucket_groups_transcripts_into_fewer_topics(
+        self, temp_output_dir: str, fixtures_path: Path
+    ) -> None:
+        config = PipelineConfig(
+            textbook_path=str(fixtures_path),
+            output_path=temp_output_dir,
+            augment_questions=False,
+            transcript_topic_bucket_days=7,
+        )
+        pipeline = DataPipeline(config)
+
+        transcript_questions = [
+            Question(
+                question="Q1",
+                reference_answer="A1",
+                source="episode-2026-01-12",  # ISO week 3
+            ),
+            Question(
+                question="Q2",
+                reference_answer="A2",
+                source="episode-2026-01-15",  # ISO week 3
+            ),
+            Question(
+                question="Q3",
+                reference_answer="A3",
+                source="episode-2026-01-22",  # ISO week 4
+            ),
+        ]
+
+        quizzes = pipeline._create_transcript_topic_quizzes(transcript_questions)
+
+        assert len(quizzes) == 2
+        assert quizzes[0].topic.startswith("transcript-2026-w")
+        assert quizzes[1].topic.startswith("transcript-2026-w")
+
+    def test_bucket_source_weekly_and_biweekly(
+        self, temp_output_dir: str, fixtures_path: Path
+    ) -> None:
+        weekly = DataPipeline(
+            PipelineConfig(
+                textbook_path=str(fixtures_path),
+                output_path=temp_output_dir,
+                transcript_topic_bucket_days=7,
+                augment_questions=False,
+            )
+        )
+        biweekly = DataPipeline(
+            PipelineConfig(
+                textbook_path=str(fixtures_path),
+                output_path=temp_output_dir,
+                transcript_topic_bucket_days=14,
+                augment_questions=False,
+            )
+        )
+
+        assert weekly._bucket_transcript_source("episode-2026-01-15").startswith(
+            "transcript-2026-w"
+        )
+        assert biweekly._bucket_transcript_source("episode-2026-01-15").startswith(
+            "transcript-2026-bw"
+        )
+        assert weekly._bucket_transcript_source("unit-01/chapter-01/topic-01") == (
+            "unit-01/chapter-01/topic-01"
+        )
+
     def test_synthesizes_chapter_and_unit_from_transcript_topics(
         self, temp_output_dir: str, fixtures_path: Path
     ) -> None:

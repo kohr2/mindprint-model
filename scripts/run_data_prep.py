@@ -96,6 +96,15 @@ Examples:
         help="Target number of questions per episode (default: 15)",
     )
     parser.add_argument(
+        "--transcript-bucket-days",
+        type=int,
+        default=1,
+        help=(
+            "Bucket transcript topics by day window "
+            "(1=episode, 7=weekly, 14=biweekly; default: 1)"
+        ),
+    )
+    parser.add_argument(
         "--no-augment",
         action="store_true",
         help="Skip question augmentation (use existing questions only)",
@@ -213,6 +222,7 @@ def main():
     print(f"Output path:       {Path(args.output).absolute()}")
     print(f"Target questions:  {args.target_questions}")
     print(f"Target episodes:   {args.target_episode_questions}")
+    print(f"Transcript bucket: {args.transcript_bucket_days} day(s)")
     print(f"Augment questions: {not args.no_augment}")
     print(f"Critical pairs:    {not args.no_critical}")
     print(f"Enhance voice:     {args.enhance_voice}")
@@ -279,6 +289,7 @@ def main():
             min_answer_length=args.min_length,
             max_answer_length=args.max_length,
             min_voice_marker_density=args.min_voice_density,
+            transcript_topic_bucket_days=max(1, args.transcript_bucket_days),
         )
 
         pipeline = DataPipeline(config)
