@@ -159,29 +159,40 @@ class MLXORPOTrainer(ORPOTrainerInterface):
                 f"{max_steps} steps, lambda_orpo={lambda_orpo}, lr={learning_rate}"
             )
 
-            def _format_pair(prompt: str, response: str) -> str:
+            def _build_texts(prompt: str, response: str) -> tuple[str, str]:
                 prompt = (prompt or "").strip()
                 response = (response or "").strip()
 
                 if hasattr(tokenizer, "apply_chat_template") and tokenizer.chat_template is not None:
                     try:
-                        messages = [
+                        full_messages = [
                             {"role": "user", "content": prompt},
                             {"role": "assistant", "content": response},
                         ]
-                        return tokenizer.apply_chat_template(
-                            messages,
+                        full_text = tokenizer.apply_chat_template(
+                            full_messages,
                             tokenize=False,
                             add_generation_prompt=False,
                         )
+                        prompt_messages = [{"role": "user", "content": prompt}]
+                        prompt_text = tokenizer.apply_chat_template(
+                            prompt_messages,
+                            tokenize=False,
+                            add_generation_prompt=True,
+                        )
+                        return full_text, prompt_text
                     except Exception as e:
                         logger.debug(f"Chat-template formatting failed, using fallback: {e}")
 
-                return f"Question:\n{prompt}\n\nAnswer:\n{response}"
+                prompt_text = f"Question:\n{prompt}\n\nAnswer:\n"
+                full_text = f"{prompt_text}{response}"
+                return full_text, prompt_text
 
             total_loss = 0.0
             steps_completed = 0
             accuracies = []
+            nll_losses = []
+            or_losses = []
 
             for step in range(max_steps):
                 # Sample batch randomly
@@ -189,35 +200,70 @@ class MLXORPOTrainer(ORPOTrainerInterface):
                 batch_indices = random.sample(range(len(train_data)), batch_size_actual)
                 batch = [train_data[i] for i in batch_indices]
 
-                # Tokenize chosen and rejected responses
-                chosen_texts = [
-                    _format_pair(item.get("prompt", ""), item.get("chosen", "")) for item in batch
+                chosen_payload = [
+                    _build_texts(item.get("prompt", ""), item.get("chosen", "")) for item in batch
                 ]
-                rejected_texts = [
-                    _format_pair(item.get("prompt", ""), item.get("rejected", "")) for item in batch
+                rejected_payload = [
+                    _build_texts(item.get("prompt", ""), item.get("rejected", "")) for item in batch
                 ]
+                chosen_texts = [pair[0] for pair in chosen_payload]
+                chosen_prompts = [pair[1] for pair in chosen_payload]
+                rejected_texts = [pair[0] for pair in rejected_payload]
+                rejected_prompts = [pair[1] for pair in rejected_payload]
 
-                # Encode
+                # Encode with dynamic per-batch padding.
                 chosen_encoded = tokenizer(
                     chosen_texts,
                     truncation=True,
                     max_length=max_length,
-                    padding="max_length",
+                    padding=True,
                     return_tensors="np",
                 )
                 rejected_encoded = tokenizer(
                     rejected_texts,
                     truncation=True,
                     max_length=max_length,
-                    padding="max_length",
+                    padding=True,
                     return_tensors="np",
                 )
+                chosen_prompt_encoded = tokenizer(
+                    chosen_prompts,
+                    truncation=True,
+                    max_length=max_length,
+                    padding=False,
+                    return_tensors="np",
+                )
+                rejected_prompt_encoded = tokenizer(
+                    rejected_prompts,
+                    truncation=True,
+                    max_length=max_length,
+                    padding=False,
+                    return_tensors="np",
+                )
+
+                chosen_labels_np = chosen_encoded["input_ids"].copy()
+                rejected_labels_np = rejected_encoded["input_ids"].copy()
+                chosen_attn = chosen_encoded["attention_mask"]
+                rejected_attn = rejected_encoded["attention_mask"]
+
+                for i, prompt_ids in enumerate(chosen_prompt_encoded["input_ids"]):
+                    prompt_len = min(len(prompt_ids), chosen_labels_np.shape[1])
+                    chosen_labels_np[i, :prompt_len] = -100
+                for i, prompt_ids in enumerate(rejected_prompt_encoded["input_ids"]):
+                    prompt_len = min(len(prompt_ids), rejected_labels_np.shape[1])
+                    rejected_labels_np[i, :prompt_len] = -100
+
+                chosen_labels_np[chosen_attn == 0] = -100
+                rejected_labels_np[rejected_attn == 0] = -100
 
                 # Convert to MLX arrays
                 chosen_ids = mx.array(chosen_encoded["input_ids"])
                 rejected_ids = mx.array(rejected_encoded["input_ids"])
+                chosen_labels = mx.array(chosen_labels_np)
+                rejected_labels = mx.array(rejected_labels_np)
 
                 # Define loss function for policy model
+                step_metrics: Dict[str, Any] = {}
                 def loss_fn(model):
                     # Forward pass for chosen and rejected
                     chosen_logits = model(chosen_ids)
@@ -226,10 +272,11 @@ class MLXORPOTrainer(ORPOTrainerInterface):
                     # Compute ORPO loss
                     loss_output = orpo_loss_fn.compute(
                         logits=chosen_logits,  # For chosen responses
-                        chosen_ids=chosen_ids,
-                        rejected_ids=rejected_ids,
+                        chosen_ids=chosen_labels,
+                        rejected_ids=rejected_labels,
                         rejected_logits=rejected_logits,  # For rejected responses
                     )
+                    step_metrics.update(loss_output.metrics)
 
                     return loss_output.loss
 
@@ -250,8 +297,12 @@ class MLXORPOTrainer(ORPOTrainerInterface):
                 total_loss += loss.item()
                 steps_completed += 1
 
-                # Accuracy is expensive to compute exactly on MLX each step; keep logging lightweight.
-                accuracies.append(0.0)
+                step_accuracy = float(step_metrics.get("accuracy", 0.0))
+                step_nll = float(step_metrics.get("nll_loss", 0.0))
+                step_or = float(step_metrics.get("or_loss", 0.0))
+                accuracies.append(step_accuracy)
+                nll_losses.append(step_nll)
+                or_losses.append(step_or)
 
                 if (step + 1) % 10 == 0:
                     avg_loss = total_loss / steps_completed
@@ -267,8 +318,8 @@ class MLXORPOTrainer(ORPOTrainerInterface):
             # Store training stats
             self._training_stats = {
                 "final_loss": final_loss,
-                "nll_loss": 0.0,
-                "or_loss": 0.0,
+                "nll_loss": sum(nll_losses) / len(nll_losses) if nll_losses else 0.0,
+                "or_loss": sum(or_losses) / len(or_losses) if or_losses else 0.0,
                 "accuracy": sum(accuracies) / len(accuracies) if accuracies else 0.0,
                 "steps_completed": steps_completed,
             }

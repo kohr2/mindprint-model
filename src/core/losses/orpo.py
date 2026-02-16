@@ -69,7 +69,8 @@ class ORPOLoss(BaseLoss):
         Returns:
             LossOutput with ORPO loss and metrics
         """
-        # Compute log probabilities for chosen and rejected
+        # Compute log probabilities for chosen and rejected.
+        # Labels may contain ignore_index (-100) for non-trainable tokens.
         chosen_logps = self._compute_log_probs(logits, chosen_ids)
         # Use rejected_logits if provided, otherwise use chosen logits (not ideal but backward compatible)
         rejected_logits_to_use = rejected_logits if rejected_logits is not None else logits
@@ -85,8 +86,6 @@ class ORPOLoss(BaseLoss):
         # Combined loss
         total_loss = nll_loss + self.config.lambda_orpo * or_loss
         
-        # Compute metrics
-        import numpy as np
         # Accuracy: fraction where chosen preferred (log_odds > 0); use .float() for torch bool tensors
         if hasattr(log_odds, 'float'):
             accuracy = (log_odds > 0).float().mean().item()
@@ -107,7 +106,12 @@ class ORPOLoss(BaseLoss):
         )
     
     def _compute_log_probs(self, logits: Any, labels: Any) -> Any:
-        """Compute log probabilities for labels given logits (mean over tokens)."""
+        """
+        Compute sequence log probabilities for labels given logits.
+
+        Labels support ignore_index=-100. Ignored tokens are excluded from the
+        per-sequence mean so padding/prompt tokens do not dominate the loss.
+        """
         try:
             import torch
             is_torch = isinstance(logits, torch.Tensor)
@@ -116,20 +120,42 @@ class ORPOLoss(BaseLoss):
         if is_torch:
             # PyTorch
             log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
-            token_logps = torch.gather(log_probs, -1, labels.unsqueeze(-1)).squeeze(-1)
-            return token_logps.mean(dim=-1)  # Average over sequence
+
+            # Shift for causal language modeling
+            shift_log_probs = log_probs[..., :-1, :]
+            shift_labels = labels[..., 1:]
+            valid_mask = shift_labels != -100
+            safe_labels = shift_labels.masked_fill(~valid_mask, 0)
+
+            token_logps = torch.gather(
+                shift_log_probs, -1, safe_labels.unsqueeze(-1)
+            ).squeeze(-1)
+            token_logps = token_logps * valid_mask
+            denom = valid_mask.sum(dim=-1).clamp_min(1)
+            return token_logps.sum(dim=-1) / denom
         else:
             # MLX
             import mlx.nn as nn
             import mlx.core as mx
             log_probs = nn.log_softmax(logits, axis=-1)
-            batch_size, seq_len, vocab_size = log_probs.shape
-            flat_log_probs = log_probs.reshape(-1, vocab_size)
-            flat_labels = labels.reshape(-1)
+
+            # Shift for causal language modeling
+            shift_log_probs = log_probs[..., :-1, :]
+            shift_labels = labels[..., 1:]
+            valid_mask = shift_labels != -100
+            safe_labels = mx.where(valid_mask, shift_labels, 0)
+
+            batch_size, seq_len, vocab_size = shift_log_probs.shape
+            flat_log_probs = shift_log_probs.reshape(-1, vocab_size)
+            flat_labels = safe_labels.reshape(-1)
             indices = mx.arange(flat_labels.shape[0], dtype=mx.int32)
             selected = flat_log_probs[indices, flat_labels.astype(mx.int32)]
             token_logps = selected.reshape(batch_size, seq_len)
-            return token_logps.mean(axis=-1)  # Average over sequence
+
+            valid_mask_f = valid_mask.astype(mx.float32)
+            token_logps = token_logps * valid_mask_f
+            denom = mx.maximum(mx.sum(valid_mask_f, axis=-1), 1.0)
+            return mx.sum(token_logps, axis=-1) / denom
     
     def _log_sigmoid(self, x: Any) -> Any:
         """Compute log(sigmoid(x)) numerically stable."""

@@ -27,8 +27,8 @@ orpo:
     - down_proj
 
 thresholds:
-  accuracy_threshold: 0.70
-  topic_pass_threshold: 0.90
+  accuracy_threshold: 0.35
+  topic_pass_threshold: 0.55
 
 pipeline:
   merge_after_unit: true

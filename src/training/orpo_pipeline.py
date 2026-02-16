@@ -493,37 +493,39 @@ class ORPOPipeline:
                                 early_stopped = True
                                 break
 
-                    if early_stopped:
-                        break
-
-                    # Create chapter progress
-                    chapter_progress = ChapterProgress(
-                        chapter_id=chapter_id,
-                        topics=topics,
-                    )
-                    chapters.append(chapter_progress)
+                    # Persist chapter progress even when max_topics/early-stop interrupts.
+                    if topics:
+                        chapter_progress = ChapterProgress(
+                            chapter_id=chapter_id,
+                            topics=topics,
+                        )
+                        chapters.append(chapter_progress)
 
                     # Clear cache between chapters
                     mps_empty_cache()
 
-                if early_stopped:
-                    break
+                    if early_stopped:
+                        break
 
-                # Create unit progress
-                unit_progress = UnitProgress(
-                    unit_id=unit_id,
-                    chapters=chapters,
-                    merged=False,
-                )
-                self.units.append(unit_progress)
+                # Persist unit progress even when max_topics/early-stop interrupts.
+                if chapters:
+                    unit_progress = UnitProgress(
+                        unit_id=unit_id,
+                        chapters=chapters,
+                        merged=False,
+                    )
+                    self.units.append(unit_progress)
 
-                # Merge after unit if enabled
-                if self.config.merge_after_unit:
-                    self._merge_unit_adapters(unit_progress)
-                    unit_progress.merged = True
+                    # Merge after unit if enabled
+                    if self.config.merge_after_unit:
+                        self._merge_unit_adapters(unit_progress)
+                        unit_progress.merged = True
 
                 # Clear cache after each unit
                 mps_empty_cache()
+
+                if early_stopped:
+                    break
 
             # Compute final results
             total_topics = sum(u.total_topics for u in self.units)
@@ -675,6 +677,7 @@ class ORPOPipeline:
             eval_result = self._evaluate_topic(topic_data)
             progress.accuracy_score = eval_result.get("accuracy", 0.0)
             progress.voice_score = eval_result.get("voice_score", 0.0)
+            marker_voice_score = eval_result.get("voice_marker_score", 0.0)
             holdout_examples = int(eval_result.get("holdout_examples", 0))
             gate_reason = str(eval_result.get("gate_reason", ""))
 
@@ -696,6 +699,7 @@ class ORPOPipeline:
                 "status": progress.status.value,
                 "accuracy": progress.accuracy_score,
                 "voice_score": progress.voice_score,
+                "voice_marker_score": marker_voice_score,
                 "combined_score": combined_score,
                 "train_examples": len(preference_pairs),
                 "holdout_examples": holdout_examples,
@@ -707,6 +711,7 @@ class ORPOPipeline:
             logger.info(
                 f"Topic {topic_id} complete: status={progress.status.value}, "
                 f"accuracy={progress.accuracy_score:.2f}, voice={progress.voice_score:.2f}, "
+                f"marker_voice={marker_voice_score:.2f}, "
                 f"orpo_loss={progress.orpo_loss:.4f}"
             )
 
@@ -755,6 +760,7 @@ class ORPOPipeline:
                 return {
                     "accuracy": 0.0,
                     "voice_score": 0.0,
+                    "voice_marker_score": 0.0,
                     "passed": False,
                     "holdout_examples": 0,
                     "gate_reason": reason,
@@ -765,7 +771,13 @@ class ORPOPipeline:
 
             return {
                 "accuracy": result.get("accuracy", 0.0),
-                "voice_score": result.get("voice_score", 0.0),
+                # Use composite score for promotion gate.
+                "voice_score": result.get(
+                    "voice_overall_score",
+                    result.get("combined_score", result.get("voice_score", 0.0)),
+                ),
+                # Keep marker-only score for diagnostics.
+                "voice_marker_score": result.get("voice_marker_score", 0.0),
                 "passed": result.get("passed", False),
                 "holdout_examples": len(questions),
                 "gate_reason": "",
@@ -776,6 +788,7 @@ class ORPOPipeline:
             return {
                 "accuracy": 0.0,
                 "voice_score": 0.0,
+                "voice_marker_score": 0.0,
                 "passed": False,
                 "holdout_examples": 0,
                 "gate_reason": f"evaluation_error: {e}",

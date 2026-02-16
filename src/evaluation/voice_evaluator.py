@@ -332,7 +332,10 @@ class QuizEvaluator:
 
         return {
             "accuracy": voice_result.semantic_similarity,
-            "voice_score": voice_result.voice_marker_score,
+            # Use the composite score for promotion gates.
+            "voice_score": voice_result.overall_score,
+            "voice_overall_score": voice_result.overall_score,
+            "voice_marker_score": voice_result.voice_marker_score,
             "combined_score": voice_result.overall_score,
             "passed": voice_result.overall_score >= threshold,
             "voice_details": voice_result.to_dict(),
