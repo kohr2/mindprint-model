@@ -13,10 +13,14 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 import yaml
+
+# Add project root to path so `src` imports work when launched from arbitrary cwd.
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.backends import create_backend
 # Trigger backend registration side effects.
