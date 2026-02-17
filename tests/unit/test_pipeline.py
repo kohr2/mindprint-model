@@ -363,6 +363,70 @@ class TestTranscriptHierarchySynthesis:
         assert unit_exams[0].unit == "unit-2026"
         assert len(unit_exams[0].questions) == 2
 
+    def test_filters_synthetic_transcript_questions_for_training(
+        self, temp_output_dir: str, fixtures_path: Path
+    ) -> None:
+        config = PipelineConfig(
+            textbook_path=str(fixtures_path),
+            output_path=temp_output_dir,
+            augment_questions=False,
+            use_transcripts=True,
+            transcript_dir=temp_output_dir,
+            exclude_synthetic_transcript_questions=True,
+        )
+        pipeline = DataPipeline(config)
+
+        real_q = Question(
+            question="Real question",
+            reference_answer="Real answer",
+            source="episode-2026-01-12",
+            key_concepts=["cycle"],
+        )
+        synthetic_q = Question(
+            question="Synthetic question",
+            reference_answer="Synthetic answer",
+            source="episode-2026-01-12",
+            key_concepts=[DataPipeline.SYNTHETIC_TRANSCRIPT_TAG],
+        )
+
+        filtered = pipeline._filter_training_transcript_questions([real_q, synthetic_q])
+        assert len(filtered) == 1
+        assert filtered[0].question == "Real question"
+
+    def test_merges_weak_weekly_bucket_into_adjacent(
+        self, temp_output_dir: str, fixtures_path: Path
+    ) -> None:
+        config = PipelineConfig(
+            textbook_path=str(fixtures_path),
+            output_path=temp_output_dir,
+            augment_questions=False,
+            transcript_topic_bucket_days=7,
+            transcript_merge_weak_buckets=True,
+            transcript_min_train_pairs_per_bucket=30,
+            transcript_holdout_ratio_for_bucketing=0.2,
+        )
+        pipeline = DataPipeline(config)
+
+        questions = [
+            Question(
+                question=f"W3-{i}",
+                reference_answer="A",
+                source="episode-2026-01-12",  # ISO week 03
+            )
+            for i in range(20)
+        ] + [
+            Question(
+                question=f"W4-{i}",
+                reference_answer="A",
+                source="episode-2026-01-22",  # ISO week 04
+            )
+            for i in range(50)
+        ]
+
+        source_map = pipeline._build_transcript_source_map(questions)
+        assert source_map["episode-2026-01-12"] == "transcript-2026-w04"
+        assert source_map["episode-2026-01-22"] == "transcript-2026-w04"
+
 
 class TestTranscriptAugmentation:
     """Test transcript LLM augmentation path."""

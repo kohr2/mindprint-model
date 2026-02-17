@@ -12,6 +12,7 @@ from collections import defaultdict
 import json
 import logging
 import random
+import math
 from datetime import datetime
 import re
 
@@ -50,6 +51,13 @@ class PipelineConfig:
     # Transcript bucketing control.
     # 1 = per-episode topics (legacy behavior), 7 = weekly buckets, 14 = biweekly.
     transcript_topic_bucket_days: int = 1
+    # Merge weak transcript buckets so each bucket has enough train signal.
+    transcript_merge_weak_buckets: bool = True
+    transcript_min_train_pairs_per_bucket: int = 30
+    transcript_holdout_ratio_for_bucketing: float = 0.2
+    # Synthetic fallback questions can help coverage for eval, but are lower
+    # quality for preference training and should be excluded by default.
+    exclude_synthetic_transcript_questions: bool = True
 
 
 @dataclass
@@ -70,6 +78,7 @@ class PipelineStats:
 
 class DataPipeline:
     """Complete data preparation pipeline for mindprint training."""
+    SYNTHETIC_TRANSCRIPT_TAG = "__synthetic_fallback__"
 
     def __init__(self, config: PipelineConfig):
         """
@@ -227,6 +236,12 @@ class DataPipeline:
                     transcript_questions
                 )
 
+            # Normalize transcript sources to configured bucket IDs and merge weak buckets.
+            transcript_questions = self._assign_transcript_sources(transcript_questions)
+            training_transcript_questions = self._filter_training_transcript_questions(
+                transcript_questions
+            )
+
             if use_textbook:
                 self.stats.total_questions_before += transcript_base_count
                 self.stats.total_questions_after += len(transcript_questions)
@@ -241,7 +256,7 @@ class DataPipeline:
                 )
 
             # Create SFT data from transcript questions
-            for question in transcript_questions:
+            for question in training_transcript_questions:
                 # Use question.source if set, otherwise default to 'transcript'
                 raw_source = question.source if question.source else "transcript"
                 source = self._bucket_transcript_source(raw_source)
@@ -256,7 +271,7 @@ class DataPipeline:
             transcript_preference_pairs = self.preference_gen.generate_all(
                 [
                     (q, self._bucket_transcript_source(q.source or "transcript"))
-                    for q in transcript_questions
+                    for q in training_transcript_questions
                 ]
             )
 
@@ -484,7 +499,10 @@ class DataPipeline:
                     question=question_text,
                     reference_answer=base.reference_answer,
                     question_type="open",
-                    key_concepts=base.key_concepts[:] if base.key_concepts else [],
+                    key_concepts=(
+                        (base.key_concepts[:] if base.key_concepts else [])
+                        + [DataPipeline.SYNTHETIC_TRANSCRIPT_TAG]
+                    ),
                     source=source,
                 )
             )
@@ -551,6 +569,195 @@ class DataPipeline:
             )
 
         return topic_quizzes
+
+    @staticmethod
+    def _is_bucket_topic_id(source: str) -> bool:
+        """Return True for transcript bucket topic IDs created by this pipeline."""
+        return bool(
+            re.match(
+                r"^transcript-\d{4}-(?:w\d{2}|bw\d{2}|b\d{2}-\d{2})$",
+                source or "",
+            )
+        )
+
+    def _minimum_total_pairs_per_bucket(self) -> int:
+        """
+        Convert minimum train pairs target into minimum total pairs per bucket.
+
+        Uses an expected holdout ratio (default 0.2) so min train coverage
+        is preserved after deterministic split.
+        """
+        min_train = max(1, int(self.config.transcript_min_train_pairs_per_bucket))
+        holdout_ratio = float(self.config.transcript_holdout_ratio_for_bucketing)
+        holdout_ratio = max(0.0, min(0.95, holdout_ratio))
+        return int(math.ceil(min_train / (1.0 - holdout_ratio)))
+
+    def _build_transcript_source_map(
+        self, transcript_questions: List[Question]
+    ) -> Dict[str, str]:
+        """
+        Build source remap from raw transcript episode IDs to bucket IDs.
+
+        Applies optional weak-bucket merging on bucketed sources.
+        """
+        source_map: Dict[str, str] = {}
+        if not transcript_questions:
+            return source_map
+
+        raw_counts: Dict[str, int] = defaultdict(int)
+        for question in transcript_questions:
+            raw = (question.source or "transcript").strip()
+            raw_counts[raw] += 1
+
+        for raw_source in raw_counts.keys():
+            source_map[raw_source] = self._bucket_transcript_source(raw_source)
+
+        if not self.config.transcript_merge_weak_buckets:
+            return source_map
+
+        bucket_counts: Dict[str, int] = defaultdict(int)
+        for raw_source, count in raw_counts.items():
+            bucket_counts[source_map[raw_source]] += count
+
+        merge_candidates = {
+            source: count
+            for source, count in bucket_counts.items()
+            if self._is_bucket_topic_id(source)
+        }
+        if len(merge_candidates) <= 1:
+            return source_map
+
+        min_total_pairs = self._minimum_total_pairs_per_bucket()
+        redirects = self._merge_weak_bucket_counts(merge_candidates, min_total_pairs)
+        if not redirects:
+            return source_map
+
+        def _resolve(source: str) -> str:
+            visited = set()
+            while source in redirects and source not in visited:
+                visited.add(source)
+                source = redirects[source]
+            return source
+
+        for raw_source, bucket_source in list(source_map.items()):
+            source_map[raw_source] = _resolve(bucket_source)
+
+        logger.info(
+            "Merged weak transcript buckets (min_total_pairs=%d): %s",
+            min_total_pairs,
+            redirects,
+        )
+        return source_map
+
+    @staticmethod
+    def _merge_weak_bucket_counts(
+        bucket_counts: Dict[str, int],
+        min_total_pairs: int,
+    ) -> Dict[str, str]:
+        """
+        Merge weak buckets into adjacent buckets until minimum size is met.
+
+        Adjacent means neighboring bucket IDs in sorted order.
+        """
+        counts = dict(bucket_counts)
+        redirects: Dict[str, str] = {}
+
+        while True:
+            active = [source for source in sorted(counts.keys()) if counts[source] > 0]
+            weak = [source for source in active if counts[source] < min_total_pairs]
+            if len(active) <= 1 or not weak:
+                break
+
+            merged_any = False
+            for source in weak:
+                if counts.get(source, 0) <= 0:
+                    continue
+                active = [s for s in sorted(counts.keys()) if counts[s] > 0]
+                if len(active) <= 1 or source not in active:
+                    break
+
+                idx = active.index(source)
+                prev_source = active[idx - 1] if idx > 0 else None
+                next_source = active[idx + 1] if idx < len(active) - 1 else None
+                if not prev_source and not next_source:
+                    continue
+                if not prev_source:
+                    target = next_source
+                elif not next_source:
+                    target = prev_source
+                else:
+                    target = (
+                        prev_source
+                        if counts[prev_source] >= counts[next_source]
+                        else next_source
+                    )
+
+                counts[target] += counts[source]
+                counts[source] = 0
+                redirects[source] = target
+                merged_any = True
+
+            if not merged_any:
+                break
+
+        # Path compression so each key points to final bucket.
+        compressed: Dict[str, str] = {}
+        for source in bucket_counts.keys():
+            final_source = source
+            seen = set()
+            while final_source in redirects and final_source not in seen:
+                seen.add(final_source)
+                final_source = redirects[final_source]
+            if final_source != source:
+                compressed[source] = final_source
+        return compressed
+
+    def _assign_transcript_sources(
+        self, transcript_questions: List[Question]
+    ) -> List[Question]:
+        """Assign normalized (and optionally merged) transcript sources in place."""
+        if not transcript_questions:
+            return transcript_questions
+
+        source_map = self._build_transcript_source_map(transcript_questions)
+        for question in transcript_questions:
+            raw_source = (question.source or "transcript").strip()
+            question.source = source_map.get(
+                raw_source, self._bucket_transcript_source(raw_source)
+            )
+
+        by_source: Dict[str, int] = defaultdict(int)
+        for question in transcript_questions:
+            by_source[question.source] += 1
+        logger.info(
+            "Transcript source distribution after bucketing: %s",
+            dict(sorted(by_source.items())),
+        )
+        return transcript_questions
+
+    def _is_synthetic_transcript_question(self, question: Question) -> bool:
+        """Identify deterministic synthetic transcript fallback questions."""
+        return self.SYNTHETIC_TRANSCRIPT_TAG in (question.key_concepts or [])
+
+    def _filter_training_transcript_questions(
+        self, transcript_questions: List[Question]
+    ) -> List[Question]:
+        """Drop low-signal synthetic transcript questions from training data."""
+        if not self.config.exclude_synthetic_transcript_questions:
+            return transcript_questions
+
+        filtered = [
+            question
+            for question in transcript_questions
+            if not self._is_synthetic_transcript_question(question)
+        ]
+        dropped = len(transcript_questions) - len(filtered)
+        if dropped > 0:
+            logger.info(
+                "Dropped %d synthetic transcript fallback questions from training pairs",
+                dropped,
+            )
+        return filtered
 
     def _bucket_transcript_source(self, source: str) -> str:
         """
