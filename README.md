@@ -65,6 +65,16 @@ python scripts/run_orpo_training.py \
   --backend pytorch --data-dir ./data/bob_loukas/transcripts
 ```
 
+### Mac Studio Model Alias Links
+
+When serving merged models via MLX and selecting models by URL alias in `mindprint-ui`, keep stable symlinks in `output/merged`:
+
+```bash
+./scripts/refresh_model_aliases.sh
+```
+
+This maps aliases like `transcripts_on_curriculum` to the latest timestamped merged folder.
+
 ### Configuration
 
 Edit `configs/training_pipeline.yaml`:
